@@ -128,6 +128,31 @@ func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domai
 }
 
 func (c *client) IssueCertificate() error {
+	err = c.loadDirectory()
+	if err != nil {
+		return err
+	}
+
+func (c *client) loadDirectory() error {
+	l := log.WithField("directoryURL", c.directoryURL)
+
+	resp, err := c.httpClient.Get(c.directoryURL)
+	if err != nil {
+		l.WithError(err).Error("Failed to get directory URL.")
+		return err
+	}
+	defer resp.Body.Close()
+
+	err = json.NewDecoder(resp.Body).Decode(&c.dir)
+	if err != nil {
+		l.WithError(err).Error("Failed to decode JSON.")
+		return err
+	}
+
+	log.WithField("directory", c.dir).Debug("Received directory.")
+	return nil
+}
+
 	return nil
 }
 
