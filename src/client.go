@@ -133,6 +133,14 @@ func (c *client) IssueCertificate() error {
 		return err
 	}
 
+	err = c.getNonce()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *client) loadDirectory() error {
 	l := log.WithField("directoryURL", c.directoryURL)
 
@@ -150,6 +158,26 @@ func (c *client) loadDirectory() error {
 	}
 
 	log.WithField("directory", c.dir).Debug("Received directory.")
+	return nil
+}
+
+func (c *client) getNonce() error {
+	resp, err := c.httpClient.Head(c.dir.NewNonceURL)
+	if err != nil {
+		log.WithError(err).Error("Failed to get nonce.")
+		return err
+	}
+	defer resp.Body.Close()
+
+	nonce := resp.Header.Get("Replay-Nonce")
+	if len(nonce) == 0 {
+		err = errors.New("nonce not found")
+		log.WithError(err).Error("Failed to extract nonce from header.")
+		return err
+	}
+
+	c.nonce = nonce
+	log.WithField("nonce", nonce).Debug("Received nonce.")
 	return nil
 }
 
