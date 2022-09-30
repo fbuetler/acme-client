@@ -1,0 +1,11 @@
+#!/bin/bash
+DIRECTORY=$(dirname "$0")
+echo "Changing to ${DIRECTORY}"
+cd "$DIRECTORY" || exit 1
+
+export PEBBLE_WFE_NONCEREJECT=0
+
+echo "Running: pebble"
+pebble \
+    -config config.json \
+    -dnsserver localhost:10053
