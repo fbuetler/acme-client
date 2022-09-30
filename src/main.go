@@ -9,6 +9,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	thrustrootCert = "project/pebble.minica.pem"
+)
+
 var opts struct {
 	Positional struct {
 		ChallengeType string `positional-arg-name:"Challenge type" choice:"dns01" choice:"http01" required:"yes" description:"Challenge type indicates which ACME challenge type the client should perform"`
@@ -40,8 +44,37 @@ func main() {
 		log.Fatal(err)
 	}
 
+	rootCAs, err := loadThrustrootCert()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to load thrust root cert.")
+	}
+
+	c := NewClient(rootCAs, opts.Dir, opts.Positional.ChallengeType, opts.Domains)
 	runDNSServer(opts.Record)
 	runChallengeServer()
 	runCertificateServer()
 	runShutdownServer()
+}
+
+func loadThrustrootCert() (*x509.CertPool, error) {
+	log.Debug("Create cert pool")
+	rootCAs, _ := x509.SystemCertPool()
+	if rootCAs == nil {
+		rootCAs = x509.NewCertPool()
+	}
+
+	log.Debug("Read thrust root cert")
+	certs, err := ioutil.ReadFile(thrustrootCert)
+	if err != nil {
+		log.WithField("file", thrustrootCert).WithError(err).Errorf("Failed to read file.")
+		return nil, err
+	}
+
+	log.Debug("Adding thrust root cert to cert pool")
+	if ok := rootCAs.AppendCertsFromPEM(certs); !ok {
+		log.WithField("file", thrustrootCert).Error("Failed to add thrust root cert to cert pool.")
+		return nil, errors.New("no cert added")
+	}
+
+	return rootCAs, nil
 }
