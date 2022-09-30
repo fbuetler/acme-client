@@ -50,6 +50,18 @@ func main() {
 	}
 
 	c := NewClient(rootCAs, opts.Dir, opts.Positional.ChallengeType, opts.Domains)
+	err = c.IssueCertificate()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to issue certificate.")
+	}
+
+	if opts.Revoke {
+		err = c.RevokeCert()
+		if err != nil {
+			log.WithError(err).Fatal("Failed to revoke certificate.")
+		}
+	}
+
 	runDNSServer(opts.Record)
 	runChallengeServer()
 	runCertificateServer()

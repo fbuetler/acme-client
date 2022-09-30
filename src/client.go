@@ -33,3 +33,10 @@ func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domai
 	}
 }
 
+func (c *client) IssueCertificate() error {
+	return nil
+}
+
+func (c *client) RevokeCert() error {
+	return nil
+}
