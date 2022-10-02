@@ -128,6 +128,11 @@ func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domai
 }
 
 func (c *client) IssueCertificate() error {
+	err := c.generateKeypair()
+	if err != nil {
+		return err
+	}
+
 	err = c.loadDirectory()
 	if err != nil {
 		return err
@@ -138,6 +143,24 @@ func (c *client) IssueCertificate() error {
 		return err
 	}
 
+
+	return nil
+}
+
+func (c *client) generateKeypair() error {
+	bits := 2048
+	l := log.WithField("bits", bits)
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, bits)
+	if err != nil {
+		l.WithError(err).Error("Failed to generate private key")
+		return err
+	}
+
+	c.publicKey = privateKey.PublicKey
+	c.privateKey = privateKey
+
+	l.WithFields(log.Fields{"private key": fmt.Sprintf("%+v", c.publicKey)}).Debug("Generated key pair.")
 	return nil
 }
 
