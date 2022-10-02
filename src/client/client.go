@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -113,15 +114,14 @@ type challenge struct {
 }
 
 type client struct {
-	httpClient    http.Client     // http client used for all requests to the ACME server
-	directoryURL  string          // directory URL to bootstrap the client configuration
-	challengeType string          // challenge type that should be used
-	domains       []string        // domains to issue a certificate for
-	publicKey     rsa.PublicKey   // public key
-	privateKey    *rsa.PrivateKey // private ky
-	nonce         string          // replay nonce
-	dir           dir             // directory with the client configuration
-	account       account         // account connected with the key pair above
+	httpClient    http.Client   // http client used for all requests to the ACME server
+	directoryURL  string        // directory URL to bootstrap the client configuration
+	challengeType string        // challenge type that should be used
+	domains       []string      // domains to issue a certificate for
+	signer        crypto.Signer // signing key
+	nonce         string        // replay nonce
+	dir           dir           // directory with the client configuration
+	account       account       // account connected with the key pair above
 }
 
 func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domains []string) *client {
@@ -201,16 +201,15 @@ func (c *client) generateKeypair() error {
 	bits := 2048
 	l := log.WithField("bits", bits)
 
-	privateKey, err := rsa.GenerateKey(rand.Reader, bits)
+	signer, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
 		l.WithError(err).Error("Failed to generate private key")
 		return err
 	}
 
-	c.publicKey = privateKey.PublicKey
-	c.privateKey = privateKey
+	c.signer = signer
 
-	l.WithFields(log.Fields{"private key": fmt.Sprintf("%+v", c.publicKey)}).Debug("Generated key pair.")
+	l.Debug("Generated key pair.")
 	return nil
 }
 
@@ -260,7 +259,7 @@ func (c *client) createAccount() error {
 	}
 	targetURL := c.dir.NewAccountURL
 
-	accountJWS, err := jws.GenerateJWS(c.publicKey, c.privateKey, c.nonce, targetURL, payload)
+	accountJWS, err := jws.GenerateJWS(c.signer, c.nonce, targetURL, payload)
 	if err != nil {
 		log.WithError(err).Error("Failed to generate JWS.")
 		return err

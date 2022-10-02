@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -45,13 +46,21 @@ type JWK struct {
 
 // According to RFC 7515 - JSON Web Signature (JWS)
 // See https://www.rfc-editor.org/rfc/rfc7515#section-3
-func GenerateJWS(publicKey rsa.PublicKey, signingKey *rsa.PrivateKey, nonce string, targetURL string, payloadRaw interface{}) ([]byte, error) {
+func GenerateJWS(signer crypto.Signer, nonce string, targetURL string, payloadRaw interface{}) ([]byte, error) {
 	// header
-	jwk := JWK{
-		Kty: keyType,
-		N:   encodeBase64url(publicKey.N.Bytes()),
-		E:   encodeBase64url(big.NewInt(int64(publicKey.E)).Bytes()),
+
+	var jwk JWK
+	switch pub := signer.Public().(type) {
+	case *rsa.PublicKey:
+		jwk = JWK{
+			Kty: keyType,
+			N:   encodeBase64url(pub.N.Bytes()),
+			E:   encodeBase64url(big.NewInt(int64(pub.E)).Bytes()),
+		}
+	default:
+		return nil, errors.New("unsupported key type")
 	}
+
 	h := JWSProtectedHeader{
 		Alg:   algorithm,
 		Nonce: nonce,
@@ -74,7 +83,7 @@ func GenerateJWS(publicKey rsa.PublicKey, signingKey *rsa.PrivateKey, nonce stri
 
 	// signature
 	signature, err := computeSignature(
-		signingKey,
+		signer,
 		[]byte(strings.Join([]string{header, payload}, ".")),
 	)
 	if err != nil {
@@ -122,11 +131,11 @@ func marshallSegment(s interface{}) ([]byte, error) {
 	return json, nil
 }
 
-func computeSignature(signingKey *rsa.PrivateKey, p []byte) (string, error) {
+func computeSignature(signer crypto.Signer, p []byte) (string, error) {
 	hasher := crypto.SHA256.New()
 	hasher.Write(p)
 
-	signBytes, err := signingKey.Sign(rand.Reader, hasher.Sum(nil), crypto.SHA256)
+	signBytes, err := signer.Sign(rand.Reader, hasher.Sum(nil), crypto.SHA256)
 	if err != nil {
 		log.WithError(err).Error("Failed to sign header and payload.")
 		return "", err
