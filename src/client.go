@@ -1,64 +1,72 @@
 package main
 
 import (
+	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 
 	log "github.com/sirupsen/logrus"
+
+	"acme/src/jws"
 )
 
-type orderStatus int
-type authorizationStatus int
-type challengeStatus int
-type accountStatus int
+type orderStatus string
+type authorizationStatus string
+type challengeStatus string
+type accountStatus string
 
 const (
-	ORDER_PENDING orderStatus = iota
-	ORDER_READY
-	ORDER_PROCESSING
-	ORDER_VALID
-	ORDER_INVALID
-)
-
-const (
-	AUTHORIZATION_PENDING authorizationStatus = iota
-	AUTHORIZATION_VALID
-	AUTHORIZATION_INVALID
-	AUTHORIZATION_DEACTIVATED
-	AUTHORIZATION_EXPIRED
-	AUTHORIZATION_REVOKED
+	ORDER_PENDING    orderStatus = "pending"
+	ORDER_READY      orderStatus = "ready"
+	ORDER_PROCESSING orderStatus = "processing"
+	ORDER_VALID      orderStatus = "valid"
+	ORDER_INVALID    orderStatus = "invalid"
 )
 
 const (
-	CHALLENGE_PENDING challengeStatus = iota
-	CHALLENGE_PROCESSING
-	CHALLENGE_VALID
-	CHALLENGE_INVALID
+	AUTHORIZATION_PENDING     authorizationStatus = "pending"
+	AUTHORIZATION_VALID       authorizationStatus = "valid"
+	AUTHORIZATION_INVALID     authorizationStatus = "invalid"
+	AUTHORIZATION_DEACTIVATED authorizationStatus = "deactivated"
+	AUTHORIZATION_EXPIRED     authorizationStatus = "expired"
+	AUTHORIZATION_REVOKED     authorizationStatus = "revoked"
 )
 
 const (
-	ACCOUNT_VALID accountStatus = iota
-	ACCOUNT_DEACTIVATED
-	ACCOUNT_REVOKED
+	CHALLENGE_PENDING    challengeStatus = "pending"
+	CHALLENGE_PROCESSING challengeStatus = "processing"
+	CHALLENGE_VALID      challengeStatus = "valid"
+	CHALLENGE_INVALID    challengeStatus = "invalid"
+)
+
+const (
+	ACCOUNT_VALID       accountStatus = "valid"
+	ACCOUNT_DEACTIVATED accountStatus = "deactivated"
+	ACCOUNT_REVOKED     accountStatus = "revoked"
 )
 
 // In order to help clients configure themselves with the right URLs for
 // each ACME operation, ACME servers provide a directory object.
 type dir struct {
-	KeyChangeURL  string `json:"keyChange"`
-	NewAccountURL string `json:"newAccount"`
-	NewNonceURL   string `json:"newNonce"`
-	NewOrderURL   string `json:"newOrder"`
-	RevokeCertURL string `json:"revokeCert"`
+	KeyChangeURL  string `json:"keyChange,omitempty"`
+	NewAccountURL string `json:"newAccount,omitempty"`
+	NewNonceURL   string `json:"newNonce,omitempty"`
+	NewOrderURL   string `json:"newOrder,omitempty"`
+	RevokeCertURL string `json:"revokeCert,omitempty"`
 }
 
 // An ACME account resource represents a set of metadata associated with an account.
 type account struct {
-	Status    accountStatus `json:"status"`
-	OrdersURL []string      `json:"orders"`
+	Status               accountStatus `json:"status,omitempty"`
+	OrdersURL            string        `json:"orders,omitempty"`
+	TermsOfServiceAgreed bool          `json:"termsOfServiceAgreed,omitempty"`
 }
 
 // Each account object includes an "orders" URL from which a list of
@@ -67,34 +75,34 @@ type account struct {
 // is an array of URLs, each identifying an order belonging to the
 // account.
 type ordersList struct {
-	Orders []string `json:"orders"`
+	Orders []string `json:"orders,omitempty"`
 }
 
 // An ACME order object represents a client's request for a certificate
 // and is used to track the progress of that order through to issuance.
 type order struct {
-	Status            orderStatus  `json:"status"`
-	Identifiers       []identifier `json:"identifiers"`
-	AuthorizationURLs []string     `json:"authorizations"`
-	FinalizeURL       string       `json:"finalize"`
-	CertificateURL    string       `json:"certificate"`
+	Status            orderStatus  `json:"status,omitempty"`
+	Identifiers       []identifier `json:"identifiers,omitempty"`
+	AuthorizationURLs []string     `json:"authorizations,omitempty"`
+	FinalizeURL       string       `json:"finalize,omitempty"`
+	CertificateURL    string       `json:"certificate,omitempty"`
 	// expires
 	// notBefore
 	// notAfter
 }
 
 type identifier struct {
-	Type   string `json:"type"` // usually 'dns'
-	Values string `json:"value"`
+	Type   string `json:"type,omitempty"` // usually 'dns'
+	Values string `json:"value,omitempty"`
 }
 
 // An ACME authorization object represents a server's authorization for
 // an account to represent an identifier.
 type authorization struct {
-	Identifier identifier          `json:"identifier"`
-	Status     authorizationStatus `json:"status"`
-	Challenges []challenge         `json:"challenges"`
-	Wildcard   bool                `json:"wildcard"`
+	Identifier identifier          `json:"identifier,omitempty"`
+	Status     authorizationStatus `json:"status,omitempty"`
+	Challenges []challenge         `json:"challenges,omitempty"`
+	Wildcard   bool                `json:"wildcard,omitempty"`
 	// expires
 }
 
@@ -105,12 +113,15 @@ type challenge struct {
 }
 
 type client struct {
-	httpClient    http.Client
-	directoryURL  string
-	dir           dir
-	challengeType string
-	domains       []string
-	nonce         string
+	httpClient    http.Client     // http client used for all requests to the ACME server
+	directoryURL  string          // directory URL to bootstrap the client configuration
+	challengeType string          // challenge type that should be used
+	domains       []string        // domains to issue a certificate for
+	publicKey     rsa.PublicKey   // public key
+	privateKey    *rsa.PrivateKey // private ky
+	nonce         string          // replay nonce
+	dir           dir             // directory with the client configuration
+	account       account         // account connected with the key pair above
 }
 
 func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domains []string) *client {
@@ -139,6 +150,11 @@ func (c *client) IssueCertificate() error {
 	}
 
 	err = c.getNonce()
+	if err != nil {
+		return err
+	}
+
+	err = c.createAccount()
 	if err != nil {
 		return err
 	}
@@ -180,7 +196,7 @@ func (c *client) loadDirectory() error {
 		return err
 	}
 
-	log.WithField("directory", c.dir).Debug("Received directory.")
+	log.WithFields(log.Fields{"directory": fmt.Sprintf("%+v", c.dir)}).Debug("Received directory.")
 	return nil
 }
 
@@ -201,6 +217,48 @@ func (c *client) getNonce() error {
 
 	c.nonce = nonce
 	log.WithField("nonce", nonce).Debug("Received nonce.")
+	return nil
+}
+
+func (c *client) createAccount() error {
+	payload := account{
+		TermsOfServiceAgreed: true,
+	}
+	targetURL := c.dir.NewAccountURL
+
+	accountJWS, err := jws.GenerateJWS(c.publicKey, c.privateKey, c.nonce, targetURL, payload)
+	if err != nil {
+		log.WithError(err).Error("Failed to generate JWS.")
+		return err
+	}
+
+	resp, err := c.httpClient.Post(targetURL, "application/jose+json", bytes.NewBuffer(accountJWS))
+	if err != nil {
+		log.WithError(err).Error("Failed to create account.")
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.WithError(err).Error("Failed to read response body.")
+			return err
+		}
+		body := string(bodyBytes)
+
+		err = errors.New("unexpected status code")
+		log.WithField("status code", resp.StatusCode).WithField("body", body).WithError(err).Error("Account creation failed.")
+		return err
+	}
+
+	err = json.NewDecoder(resp.Body).Decode(&c.account)
+	if err != nil {
+		log.WithError(err).Error("Failed to decode JSON.")
+		return err
+	}
+
+	log.WithFields(log.Fields{"account": fmt.Sprintf("%+v", c.account)}).Debug("Account created.")
 	return nil
 }
 
