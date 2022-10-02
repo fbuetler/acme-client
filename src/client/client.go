@@ -53,6 +53,10 @@ const (
 	ACCOUNT_REVOKED     accountStatus = "revoked"
 )
 
+const (
+	KeyBits = 2048
+)
+
 // In order to help clients configure themselves with the right URLs for
 // each ACME operation, ACME servers provide a directory object.
 type dir struct {
@@ -198,34 +202,29 @@ func (c *client) IssueCertificate() error {
 }
 
 func (c *client) generateKeypair() error {
-	bits := 2048
-	l := log.WithField("bits", bits)
-
-	signer, err := rsa.GenerateKey(rand.Reader, bits)
+	signer, err := rsa.GenerateKey(rand.Reader, KeyBits)
 	if err != nil {
-		l.WithError(err).Error("Failed to generate private key")
+		log.WithError(err).Error("Failed to generate private key")
 		return err
 	}
 
 	c.signer = signer
 
-	l.Debug("Generated key pair.")
+	log.Debug("Generated key pair.")
 	return nil
 }
 
 func (c *client) loadDirectory() error {
-	l := log.WithField("directoryURL", c.directoryURL)
-
 	resp, err := c.httpClient.Get(c.directoryURL)
 	if err != nil {
-		l.WithError(err).Error("Failed to get directory URL.")
+		log.WithError(err).Error("Failed to get directory URL.")
 		return err
 	}
 	defer resp.Body.Close()
 
 	err = json.NewDecoder(resp.Body).Decode(&c.dir)
 	if err != nil {
-		l.WithError(err).Error("Failed to decode JSON.")
+		log.WithError(err).Error("Failed to decode JSON.")
 		return err
 	}
 
@@ -259,7 +258,13 @@ func (c *client) createAccount() error {
 	}
 	targetURL := c.dir.NewAccountURL
 
-	accountJWS, err := jws.GenerateJWS(c.signer, c.nonce, targetURL, payload)
+	j, err := jws.New(c.signer)
+	if err != nil {
+		log.WithError(err).Error("Failed to setup JWS.")
+		return err
+	}
+
+	accountJWS, err := j.Encode(c.nonce, targetURL, jws.NoKeyID, payload)
 	if err != nil {
 		log.WithError(err).Error("Failed to generate JWS.")
 		return err

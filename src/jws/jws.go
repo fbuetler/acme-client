@@ -15,8 +15,7 @@ import (
 )
 
 const (
-	keyType   = "RSA"
-	algorithm = "RS256" // 2048 RSA key, maybe move generated bits and this constant into globals TODO
+	NoKeyID = ""
 )
 
 // According to RFC 8555 - Automatic Certificate Management Environment (ACME)
@@ -44,31 +43,36 @@ type JWK struct {
 	Alg string `json:"alg,omitempty"` // identifies the algorithm intended for use with the key, such as RS256
 }
 
-// According to RFC 7515 - JSON Web Signature (JWS)
-// See https://www.rfc-editor.org/rfc/rfc7515#section-3
-func GenerateJWS(signer crypto.Signer, nonce string, targetURL string, payloadRaw interface{}) ([]byte, error) {
-	// header
+type jws struct {
+	signer   crypto.Signer
+	hash     crypto.Hash
+	algoritm string
+}
 
-	var jwk JWK
-	switch pub := signer.Public().(type) {
+func New(signer crypto.Signer) (*jws, error) {
+	var hash crypto.Hash
+	var alg string
+
+	switch signer.Public().(type) {
 	case *rsa.PublicKey:
-		jwk = JWK{
-			Kty: keyType,
-			N:   encodeBase64url(pub.N.Bytes()),
-			E:   encodeBase64url(big.NewInt(int64(pub.E)).Bytes()),
-		}
+		alg = "RS256"
+		hash = crypto.SHA256
 	default:
 		return nil, errors.New("unsupported key type")
 	}
 
-	h := JWSProtectedHeader{
-		Alg:   algorithm,
-		Nonce: nonce,
-		URL:   targetURL,
-		JWK:   jwk,
-		// TODO refactor to work with other requests as well -> KID -> seperate methods for each message type
-	}
-	header, err := marshalAndEncodeSegment(h)
+	return &jws{
+		signer:   signer,
+		hash:     hash,
+		algoritm: alg,
+	}, nil
+}
+
+// According to RFC 7515 - JSON Web Signature (JWS)
+// See https://www.rfc-editor.org/rfc/rfc7515#section-3
+func (jws *jws) Encode(nonce, targetURL, kid string, payloadRaw interface{}) ([]byte, error) {
+	// header
+	header, err := jws.encodeHeader(nonce, targetURL, kid)
 	if err != nil {
 		log.WithError(err).Error("Failed to encode header.")
 		return nil, err
@@ -82,8 +86,7 @@ func GenerateJWS(signer crypto.Signer, nonce string, targetURL string, payloadRa
 	}
 
 	// signature
-	signature, err := computeSignature(
-		signer,
+	signature, err := jws.computeSignature(
 		[]byte(strings.Join([]string{header, payload}, ".")),
 	)
 	if err != nil {
@@ -97,13 +100,63 @@ func GenerateJWS(signer crypto.Signer, nonce string, targetURL string, payloadRa
 		Payload:   payload,
 		Signature: signature,
 	}
-	jws, err := marshallSegment(j)
+	jwsJSON, err := marshallSegment(j)
 	if err != nil {
 		log.WithError(err).Error("Failed to marshall JWS.")
 		return nil, err
 	}
 
-	return jws, nil
+	return jwsJSON, nil
+}
+
+func (jws *jws) encodeHeader(nonce, targetURL, kid string) (string, error) {
+	h := JWSProtectedHeader{
+		Alg:   jws.algoritm,
+		Nonce: nonce,
+		URL:   targetURL,
+	}
+
+	if kid == NoKeyID {
+		var jwk JWK
+		switch pub := jws.signer.Public().(type) {
+		case *rsa.PublicKey:
+			jwk = JWK{
+				Kty: "RSA",
+				N:   encodeBase64url(pub.N.Bytes()),
+				E:   encodeBase64url(big.NewInt(int64(pub.E)).Bytes()),
+			}
+		default:
+			return "", errors.New("unsupported key type")
+		}
+
+		h.JWK = jwk
+	} else {
+		h.KID = kid
+	}
+
+	header, err := marshalAndEncodeSegment(h)
+	if err != nil {
+		log.WithError(err).Error("Failed to encode header.")
+		return "", err
+	}
+
+	return header, nil
+}
+
+func (jws *jws) computeSignature(p []byte) (string, error) {
+	hasher := jws.hash.New()
+	hasher.Write(p)
+
+	signBytes, err := jws.signer.Sign(rand.Reader, hasher.Sum(nil), jws.hash)
+	if err != nil {
+		log.WithError(err).Error("Failed to sign header and payload.")
+		return "", err
+	}
+
+	signature := encodeBase64url(signBytes)
+	log.WithField("Signature", signature).Debug("Computed signature.")
+
+	return signature, nil
 }
 
 func marshalAndEncodeSegment(s interface{}) (string, error) {
@@ -119,32 +172,14 @@ func marshalAndEncodeSegment(s interface{}) (string, error) {
 }
 
 func marshallSegment(s interface{}) ([]byte, error) {
-	l := log.WithFields(log.Fields{"segment": fmt.Sprintf("%+v", s)})
-
 	json, err := json.Marshal(s)
 	if err != nil {
-		l.WithError(err).Error("Failed to marshall segment.")
+		log.WithFields(log.Fields{"segment": fmt.Sprintf("%+v", s)}).WithError(err).Error("Failed to marshall segment.")
 		return nil, err
 	}
-	l.WithField("JSON segment", string(json)).Debug("Marshalled segment.")
+	log.WithField("JSON segment", string(json)).Debug("Marshalled segment.")
 
 	return json, nil
-}
-
-func computeSignature(signer crypto.Signer, p []byte) (string, error) {
-	hasher := crypto.SHA256.New()
-	hasher.Write(p)
-
-	signBytes, err := signer.Sign(rand.Reader, hasher.Sum(nil), crypto.SHA256)
-	if err != nil {
-		log.WithError(err).Error("Failed to sign header and payload.")
-		return "", err
-	}
-
-	signature := encodeBase64url(signBytes)
-	log.WithField("Signature", signature).Debug("Computed signature.")
-
-	return signature, nil
 }
 
 func encodeBase64url(seg []byte) string {
