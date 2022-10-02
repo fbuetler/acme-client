@@ -7,6 +7,8 @@ import (
 
 	"github.com/jessevdk/go-flags"
 	log "github.com/sirupsen/logrus"
+
+	"acme/src/client"
 )
 
 const (
@@ -49,7 +51,7 @@ func main() {
 		log.WithError(err).Fatal("Failed to load thrust root cert.")
 	}
 
-	c := NewClient(rootCAs, opts.Dir, opts.Positional.ChallengeType, opts.Domains)
+	c := client.NewClient(rootCAs, opts.Dir, opts.Positional.ChallengeType, opts.Domains)
 	err = c.IssueCertificate()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to issue certificate.")

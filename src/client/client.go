@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
 	"bytes"
@@ -159,6 +159,40 @@ func (c *client) IssueCertificate() error {
 		return err
 	}
 
+	err = c.submitOrder()
+	if err != nil {
+		return err
+	}
+
+	err = c.fetchChallenges()
+	if err != nil {
+		return err
+	}
+
+	err = c.repondToChallenges()
+	if err != nil {
+		return err
+	}
+
+	err = c.pollForStatus()
+	if err != nil {
+		return err
+	}
+
+	err = c.finalizeOrder()
+	if err != nil {
+		return err
+	}
+
+	err = c.pollForStatus()
+	if err != nil {
+		return err
+	}
+
+	err = c.downloadCert()
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -262,6 +296,27 @@ func (c *client) createAccount() error {
 	return nil
 }
 
+func (c *client) submitOrder() error {
+	return nil
+}
+
+func (c *client) fetchChallenges() error {
+	return nil
+}
+
+func (c *client) repondToChallenges() error {
+	return nil
+}
+
+func (c *client) pollForStatus() error {
+	return nil
+}
+
+func (c *client) finalizeOrder() error {
+	return nil
+}
+
+func (c *client) downloadCert() error {
 	return nil
 }
 
