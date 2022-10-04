@@ -34,9 +34,9 @@ type order struct {
 	AuthorizationURLs []string     `json:"authorizations,omitempty"`
 	FinalizeURL       string       `json:"finalize,omitempty"`
 	CertificateURL    string       `json:"certificate,omitempty"`
-	// expires
-	// notBefore
-	// notAfter
+	NotBefore         string       `json:"notBefore,omitempty"`
+	NotAfter          string       `json:"notAfter,omitempty"`
+	Expires           string       `json:"expires,omitempty"`
 }
 
 type identifier struct {

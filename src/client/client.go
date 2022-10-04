@@ -14,16 +14,19 @@ import (
 	"acme/src/jws"
 )
 
+type emptyBody struct{}
+
 type client struct {
-	httpClient    http.Client // http client used for all requests to the ACME server
-	directoryURL  string      // directory URL to bootstrap the client configuration
-	challengeType string      // challenge type that should be used
-	domains       []string    // domains to issue a certificate for
-	signer        *jws.Signer // signing key
-	dir           dir         // directory with the client configuration
-	account       account     // account connected with the key pair above
-	kid           string      // URL to the account
-	order         order       // placed order
+	httpClient    http.Client     // http client used for all requests to the ACME server
+	directoryURL  string          // directory URL to bootstrap the client configuration
+	challengeType string          // challenge type that should be used
+	domains       []string        // domains to issue a certificate for
+	signer        *jws.Signer     // signing key
+	dir           dir             // directory with the client configuration
+	account       account         // account connected with the key pair above
+	kid           string          // URL to the account
+	order         order           // placed order
+	auths         []authorization // any of these challenge has to be completed
 }
 
 func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domains []string) *client {
@@ -61,12 +64,12 @@ func (c *client) IssueCertificate() error {
 		return err
 	}
 
-	err = c.fetchChallenges()
+	err = c.fetchAuthorizations()
 	if err != nil {
 		return err
 	}
 
-	err = c.repondToChallenges()
+	err = c.repondToAuthorization()
 	if err != nil {
 		return err
 	}

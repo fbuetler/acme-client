@@ -1,5 +1,12 @@
 package client
 
+import (
+	"fmt"
+	"net/http"
+
+	log "github.com/sirupsen/logrus"
+)
+
 type authorizationStatus string
 type challengeStatus string
 
@@ -33,13 +40,29 @@ type authorization struct {
 // client's possession of an identifier in a specific way.
 type challenge struct {
 	// content depends on challenge TODO -> RFC Section 8
+	Type  string `json:"type"`
+	URL   string `json:"url"`
+	Token string `json:"token"`
 }
 
-func (c *client) fetchChallenges() error {
+func (c *client) fetchAuthorizations() error {
+
+	for _, url := range c.order.AuthorizationURLs {
+		var auth authorization
+		_, err := c.send(url, c.kid, nil, http.StatusOK, &auth)
+		if err != nil {
+			log.WithError(err).Error("Failed to fetch authorizations.")
+			return err
+		}
+
+		c.auths = append(c.auths, auth)
+	}
+
+	log.WithFields(log.Fields{"authorizations": fmt.Sprintf("%+v", c.auths)}).Debug("Authorizations fetched.")
 	return nil
 }
 
-func (c *client) repondToChallenges() error {
+func (c *client) repondToAuthorization() error {
 	return nil
 }
 

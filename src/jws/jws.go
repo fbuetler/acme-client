@@ -21,9 +21,9 @@ const (
 // According to RFC 8555 - Automatic Certificate Management Environment (ACME)
 // See https://www.rfc-editor.org/rfc/rfc8555#section-6.2
 type JWS struct {
-	Header    string `json:"protected,omitempty"`
-	Payload   string `json:"payload,omitempty"`
-	Signature string `json:"signature,omitempty"`
+	Header    string `json:"protected"`
+	Payload   string `json:"payload"`
+	Signature string `json:"signature"`
 }
 
 type JWSProtectedHeader struct {
@@ -160,6 +160,10 @@ func (jws *Signer) computeSignature(p []byte) (string, error) {
 }
 
 func marshalAndEncodeSegment(s interface{}) (string, error) {
+	if s == nil {
+		return "", nil
+	}
+
 	json, err := marshallSegment(s)
 	if err != nil {
 		return "", err
