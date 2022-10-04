@@ -5,6 +5,8 @@ import (
 	"crypto/rsa"
 
 	log "github.com/sirupsen/logrus"
+
+	"acme/src/jws"
 )
 
 const (
@@ -18,7 +20,11 @@ func (c *client) generateKeypair() error {
 		return err
 	}
 
-	c.signer = signer
+	c.signer, err = jws.New(signer)
+	if err != nil {
+		log.WithError(err).Error("Failed to setup Signer.")
+		return err
+	}
 
 	log.Debug("Generated key pair.")
 	return nil

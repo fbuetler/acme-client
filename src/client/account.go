@@ -1,11 +1,7 @@
 package client
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 
 	log "github.com/sirupsen/logrus"
@@ -29,48 +25,18 @@ type account struct {
 }
 
 func (c *client) createAccount() error {
-	payload := account{
+	a := account{
 		TermsOfServiceAgreed: true,
 	}
-	targetURL := c.dir.NewAccountURL
+	url := c.dir.NewAccountURL
 
-	j, err := jws.New(c.signer)
+	headers, err := c.send(url, jws.NoKeyID, a, http.StatusCreated, &c.account)
 	if err != nil {
-		log.WithError(err).Error("Failed to setup JWS.")
+		log.WithError(err).Error("Failed to create Account.")
 		return err
 	}
 
-	accountJWS, err := j.Encode(c.nonce, targetURL, jws.NoKeyID, payload)
-	if err != nil {
-		log.WithError(err).Error("Failed to generate JWS.")
-		return err
-	}
-
-	resp, err := c.httpClient.Post(targetURL, "application/jose+json", bytes.NewBuffer(accountJWS))
-	if err != nil {
-		log.WithError(err).Error("Failed to create account.")
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		bodyBytes, err := io.ReadAll(resp.Body)
-		if err != nil {
-			log.WithError(err).Error("Failed to read response body.")
-			return err
-		}
-		body := string(bodyBytes)
-
-		err = errors.New("unexpected status code")
-		log.WithField("status code", resp.StatusCode).WithField("body", body).WithError(err).Error("Account creation failed.")
-		return err
-	}
-
-	err = json.NewDecoder(resp.Body).Decode(&c.account)
-	if err != nil {
-		log.WithError(err).Error("Failed to decode JSON.")
-		return err
-	}
+	c.kid = headers.Get("Location")
 
 	log.WithFields(log.Fields{"account": fmt.Sprintf("%+v", c.account)}).Debug("Account created.")
 	return nil

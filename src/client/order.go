@@ -1,5 +1,12 @@
 package client
 
+import (
+	"fmt"
+	"net/http"
+
+	log "github.com/sirupsen/logrus"
+)
+
 type orderStatus string
 
 const (
@@ -38,6 +45,26 @@ type identifier struct {
 }
 
 func (c *client) submitOrder() error {
+	var o order
+	for _, d := range c.domains {
+		o = order{
+			Identifiers: []identifier{
+				{
+					Type:   "dns",
+					Values: d,
+				},
+			},
+		}
+	}
+	url := c.dir.NewOrderURL
+
+	_, err := c.send(url, c.kid, o, http.StatusCreated, &c.order)
+	if err != nil {
+		log.WithError(err).Error("Failed to submit Order.")
+		return err
+	}
+
+	log.WithFields(log.Fields{"order": fmt.Sprintf("%+v", c.order)}).Debug("Order submitted.")
 	return nil
 }
 

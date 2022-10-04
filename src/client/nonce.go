@@ -6,11 +6,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (c *client) getNonce() error {
+func (c *client) getNonce() (string, error) {
 	resp, err := c.httpClient.Head(c.dir.NewNonceURL)
 	if err != nil {
 		log.WithError(err).Error("Failed to get nonce.")
-		return err
+		return "", err
 	}
 	defer resp.Body.Close()
 
@@ -18,10 +18,9 @@ func (c *client) getNonce() error {
 	if len(nonce) == 0 {
 		err = errors.New("nonce not found")
 		log.WithError(err).Error("Failed to extract nonce from header.")
-		return err
+		return "", err
 	}
 
-	c.nonce = nonce
 	log.WithField("nonce", nonce).Debug("Received nonce.")
-	return nil
+	return nonce, nil
 }
