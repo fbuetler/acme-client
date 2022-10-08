@@ -36,15 +36,15 @@ type JWSProtectedHeader struct {
 
 // According to RFC 7517 - JSON Web Key (JWK)
 // See https://www.rfc-editor.org/rfc/rfc7517#section-4
-type JWK struct {
+type JWK struct { // order matters!
+	E   string `json:"e,omitempty"`   // exponent
 	Kty string `json:"kty,omitempty"` // identifies the cryptographic algorithm family used with the key, such as "RSA" or "EC"
 	N   string `json:"n,omitempty"`   // modulo
-	E   string `json:"e,omitempty"`   // exponent
-	Alg string `json:"alg,omitempty"` // identifies the algorithm intended for use with the key, such as RS256
+	// Alg string `json:"alg,omitempty"` // identifies the algorithm intended for use with the key, such as RS256
 }
 
 type Signer struct {
-	signer   crypto.Signer
+	Signer   crypto.Signer
 	hash     crypto.Hash
 	algoritm string
 }
@@ -62,7 +62,7 @@ func New(signer crypto.Signer) (*Signer, error) {
 	}
 
 	return &Signer{
-		signer:   signer,
+		Signer:   signer,
 		hash:     hash,
 		algoritm: alg,
 	}, nil
@@ -118,7 +118,7 @@ func (jws *Signer) encodeHeader(nonce, targetURL, kid string) (string, error) {
 
 	if kid == NoKeyID {
 		var jwk *JWK
-		switch pub := jws.signer.Public().(type) {
+		switch pub := jws.Signer.Public().(type) {
 		case *rsa.PublicKey:
 			jwk = &JWK{
 				Kty: "RSA",
@@ -147,7 +147,7 @@ func (jws *Signer) computeSignature(p []byte) (string, error) {
 	hasher := jws.hash.New()
 	hasher.Write(p)
 
-	signBytes, err := jws.signer.Sign(rand.Reader, hasher.Sum(nil), jws.hash)
+	signBytes, err := jws.Signer.Sign(rand.Reader, hasher.Sum(nil), jws.hash)
 	if err != nil {
 		log.WithError(err).Error("Failed to sign header and payload.")
 		return "", err
@@ -181,9 +181,40 @@ func marshallSegment(s interface{}) ([]byte, error) {
 		log.WithFields(log.Fields{"segment": fmt.Sprintf("%+v", s)}).WithError(err).Error("Failed to marshall segment.")
 		return nil, err
 	}
-	log.WithField("JSON segment", string(json)).Debug("Marshalled segment.")
+	log.Debug("Marshalled segment.")
 
 	return json, nil
+}
+
+func ComputeKeyThumbprint(signer crypto.Signer) (string, error) {
+	// TODO: any prepended zero octets in the fields of a JWK object MUST be stripped before doing the computation
+	var jwk JWK
+	switch pub := signer.Public().(type) {
+	case *rsa.PublicKey:
+		jwk = JWK{
+			Kty: "RSA",
+			N:   encodeBase64url(pub.N.Bytes()),
+			E:   encodeBase64url(big.NewInt(int64(pub.E)).Bytes()),
+		}
+	default:
+		return "", errors.New("unsupported key type")
+	}
+
+	json, err := marshallSegment(jwk)
+	if err != nil {
+		return "", err
+	}
+	log.WithField("ordered JSON", string(json)).Debug("Marshalled account key.")
+
+	hasher := crypto.SHA256.New() // TODO maybe other hash function?
+	hasher.Write(json)
+	hash := hasher.Sum(nil)
+	log.Debug("Hashed marshalled account key.")
+
+	encoded := encodeBase64url(hash)
+	log.Debug("Encoded hashed marshalled account key.")
+
+	return encoded, nil
 }
 
 func encodeBase64url(seg []byte) string {

@@ -30,13 +30,13 @@ func (c *client) createAccount() error {
 	}
 	url := c.dir.NewAccountURL
 
-	headers, err := c.send(url, jws.NoKeyID, a, http.StatusCreated, &c.account)
+	resp, err := c.send(url, jws.NoKeyID, a, http.StatusCreated, &c.account)
 	if err != nil {
 		log.WithError(err).Error("Failed to create Account.")
 		return err
 	}
 
-	c.kid = headers.Get("Location")
+	c.kid = resp.Header.Get("Location")
 
 	log.WithFields(log.Fields{"account": fmt.Sprintf("%+v", c.account)}).Debug("Account created.")
 	return nil

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 
@@ -13,8 +14,8 @@ const (
 	KeyBits = 2048
 )
 
-func (c *client) generateKeypair() error {
-	signer, err := rsa.GenerateKey(rand.Reader, KeyBits)
+func (c *client) generateAccountKeypair() error {
+	signer, err := generateKeyPair()
 	if err != nil {
 		log.WithError(err).Error("Failed to generate private key")
 		return err
@@ -26,6 +27,22 @@ func (c *client) generateKeypair() error {
 		return err
 	}
 
-	log.Debug("Generated key pair.")
+	log.Debug("Generated account key pair.")
 	return nil
+}
+
+func (c *client) generateCertificateKeyPair() error {
+	privateKey, err := generateKeyPair()
+	if err != nil {
+		log.WithError(err).Error("Failed to generate private key")
+		return err
+	}
+
+	c.certKey = privateKey
+	log.Debug("Generated cert key pair.")
+	return nil
+}
+
+func generateKeyPair() (crypto.Signer, error) {
+	return rsa.GenerateKey(rand.Reader, KeyBits)
 }

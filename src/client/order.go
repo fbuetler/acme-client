@@ -40,8 +40,13 @@ type order struct {
 }
 
 type identifier struct {
+	Status string
 	Type   string `json:"type,omitempty"` // usually 'dns'
 	Values string `json:"value,omitempty"`
+}
+
+type CSR struct {
+	CSR string `json:"csr"`
 }
 
 func (c *client) submitOrder() error {
@@ -58,16 +63,61 @@ func (c *client) submitOrder() error {
 	}
 	url := c.dir.NewOrderURL
 
-	_, err := c.send(url, c.kid, o, http.StatusCreated, &c.order)
+	resp, err := c.send(url, c.kid, o, http.StatusCreated, &c.order)
 	if err != nil {
-		log.WithError(err).Error("Failed to submit Order.")
+		log.WithError(err).Error("Failed to submit order.")
 		return err
 	}
+
+	c.orderURL = resp.Header.Get("Location")
 
 	log.WithFields(log.Fields{"order": fmt.Sprintf("%+v", c.order)}).Debug("Order submitted.")
 	return nil
 }
 
+func (c *client) getOrder(url string) (order, error) {
+	var o order
+	_, err := c.send(url, c.kid, nil, http.StatusOK, &o)
+	if err != nil {
+		log.WithError(err).Error("Failed to get order.")
+		return order{}, err
+	}
+
+	return o, nil
+}
+
 func (c *client) finalizeOrder() error {
+	domain := c.domains[0]
+	san := []string{domain}
+	for _, d := range c.domains {
+		if d != domain {
+			san = append(san, d)
+		}
+	}
+
+	err := c.generateCertificateKeyPair()
+	if err != nil {
+		return err
+	}
+
+	encodedCSR, err := encodeCSR(c.certKey, domain, san)
+	if err != nil {
+		log.WithError(err).Error("Failed to encode CSR.")
+		return err
+	}
+
+	url := c.order.FinalizeURL
+	csr := CSR{
+		CSR: encodedCSR,
+	}
+
+	var o order
+	_, err = c.send(url, c.kid, csr, http.StatusOK, &o)
+	if err != nil {
+		log.WithError(err).Error("Failed to finalizeOrder.")
+		return err
+	}
+
+	log.WithFields(log.Fields{"order": fmt.Sprintf("%+v", o)}).Debug("Order finalized.")
 	return nil
 }

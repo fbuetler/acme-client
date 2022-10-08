@@ -3,6 +3,7 @@ package client
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -40,13 +41,14 @@ type authorization struct {
 // client's possession of an identifier in a specific way.
 type challenge struct {
 	// content depends on challenge TODO -> RFC Section 8
-	Type  string `json:"type"`
-	URL   string `json:"url"`
-	Token string `json:"token"`
+	Type      string `json:"type"`
+	URL       string `json:"url"`
+	Status    string `json:"status"`
+	Validated string `json:"validated"`
+	Token     string `json:"token"`
 }
 
 func (c *client) fetchAuthorizations() error {
-
 	for _, url := range c.order.AuthorizationURLs {
 		var auth authorization
 		_, err := c.send(url, c.kid, nil, http.StatusOK, &auth)
@@ -55,6 +57,7 @@ func (c *client) fetchAuthorizations() error {
 			return err
 		}
 
+		// TODO maybe only save auths where the challenge type matches
 		c.auths = append(c.auths, auth)
 	}
 
@@ -62,10 +65,37 @@ func (c *client) fetchAuthorizations() error {
 	return nil
 }
 
-func (c *client) repondToAuthorization() error {
+func (c *client) respondToAuthorization(url string) error {
+	_, err := c.send(url, c.kid, empty{}, http.StatusOK, &empty{})
+	if err != nil {
+		log.WithError(err).Error("Failed to send challenge acknowledgement.")
+		return err
+	}
+
+	log.Debug("Sent challenge acknowledgement.")
 	return nil
 }
 
-func (c *client) pollForStatus() error {
+func (c *client) pollForAuthStatusChange() error {
+	url := c.order.AuthorizationURLs[0] // TODO hacky
+
+	for {
+		log.Debug("Polling for status...")
+
+		var auth authorization
+		_, err := c.send(url, c.kid, nil, http.StatusOK, &auth)
+		if err != nil {
+			log.WithError(err).Error("Failed to fetch authorization.")
+			return err
+		}
+
+		if auth.Status == "valid" || auth.Status == "invalid" {
+			log.Debugf("Authorization status changed: %s", auth.Status)
+			break
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+
 	return nil
 }

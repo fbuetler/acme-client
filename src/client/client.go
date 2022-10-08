@@ -2,19 +2,24 @@ package client
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
 	"acme/src/jws"
+	"acme/src/servers"
 )
 
-type emptyBody struct{}
+type empty struct{}
 
 type client struct {
 	httpClient    http.Client     // http client used for all requests to the ACME server
@@ -26,7 +31,11 @@ type client struct {
 	account       account         // account connected with the key pair above
 	kid           string          // URL to the account
 	order         order           // placed order
+	orderURL      string          // URL to the placed order
 	auths         []authorization // any of these challenge has to be completed
+	certKey       crypto.Signer
+	cert          []byte
+	issuer        []byte
 }
 
 func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domains []string) *client {
@@ -44,7 +53,7 @@ func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domai
 }
 
 func (c *client) IssueCertificate() error {
-	err := c.generateKeypair()
+	err := c.generateAccountKeypair()
 	if err != nil {
 		return err
 	}
@@ -69,12 +78,35 @@ func (c *client) IssueCertificate() error {
 		return err
 	}
 
-	err = c.repondToAuthorization()
+	chalURL, token, err := c.getChallenge()
 	if err != nil {
 		return err
 	}
 
-	err = c.pollForStatus()
+	keyAuthorization, err := c.generateKeyAuthorization(token)
+	if err != nil {
+		return err
+	}
+
+	// TODO run dns challenger server in case of dns-01
+	// TODO tear down after challenge verfication
+	err = servers.RunChallengeServer(token, keyAuthorization)
+	if err != nil {
+		return err
+	}
+
+	// TODO wait for challenger server to be up
+	time.Sleep(1 * time.Second)
+
+	err = c.respondToAuthorization(chalURL)
+	if err != nil {
+		return err
+	}
+
+	// TODO give some time to verify the challenge
+	time.Sleep(5 * time.Second)
+
+	err = c.pollForAuthStatusChange()
 	if err != nil {
 		return err
 	}
@@ -84,40 +116,41 @@ func (c *client) IssueCertificate() error {
 		return err
 	}
 
-	err = c.pollForStatus()
+	// TODO may have to retry this until its ready
+	order, err := c.getOrder(c.orderURL)
 	if err != nil {
 		return err
 	}
 
-	err = c.downloadCert()
+	err = c.downloadCert(order)
 	if err != nil {
 		return err
 	}
+
+	// TODO install cert
 
 	return nil
 }
 
-func (c *client) send(url, kid string, sendPayload interface{}, expectedStatusCode int, recvPayload interface{}) (http.Header, error) {
+func (c *client) send(url, kid string, reqPayload interface{}, expectedStatusCode int, respPayload interface{}) (*http.Response, error) {
 	nonce, err := c.getNonce()
 	if err != nil {
 		return nil, err
 	}
 
-	jws, err := c.signer.Encode(nonce, url, kid, sendPayload)
+	jws, err := c.signer.Encode(nonce, url, kid, reqPayload)
 	if err != nil {
 		log.WithError(err).Error("Failed to encode JWS.")
 		return nil, err
 	}
 
-	log.Debug("Sending request...")
+	log.WithField("payload", fmt.Sprintf("%+v", reqPayload)).Debugf("Sending request to %s...", url)
 	resp, err := c.httpClient.Post(url, "application/jose+json", bytes.NewBuffer(jws))
 	if err != nil {
 		log.WithError(err).Error("Failed to send Request.")
 		return nil, err
 	}
-	defer resp.Body.Close()
 
-	log.Debug("Received response.")
 	if resp.StatusCode != expectedStatusCode {
 		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
@@ -131,12 +164,53 @@ func (c *client) send(url, kid string, sendPayload interface{}, expectedStatusCo
 		return nil, err
 	}
 
-	err = json.NewDecoder(resp.Body).Decode(recvPayload)
+	if respPayload == nil {
+		log.Debug("Request succeeded. Returing without decoding.")
+		return resp, nil
+	}
+
+	err = json.NewDecoder(resp.Body).Decode(respPayload)
 	if err != nil {
 		log.WithError(err).Error("Failed to decode JSON.")
 		return nil, err
 	}
+	log.WithField("payload", fmt.Sprintf("%+v", respPayload)).Debug("Received response.")
 
 	log.Debug("Request succeeded.")
-	return resp.Header, nil
+	return resp, nil
+}
+
+func (c *client) generateKeyAuthorization(token string) (string, error) {
+
+	// token
+	// account key
+	keyThumbprint, err := jws.ComputeKeyThumbprint(c.signer.Signer)
+	if err != nil {
+		log.WithError(err).Error("Failed to compute key thumbprint")
+		return "", err
+	}
+
+	keyAuthorization := strings.Join([]string{token, keyThumbprint}, ".")
+	log.Debug("Computed key authorization.")
+
+	return keyAuthorization, nil
+}
+
+func (c *client) getChallenge() (string, string, error) {
+	var url string
+	var t string
+	for _, a := range c.auths {
+		for _, chal := range a.Challenges {
+			if chal.Type == c.challengeType {
+				t = chal.Token
+				url = chal.URL
+			}
+		}
+	}
+
+	if len(t) == 0 {
+		return "", "", errors.New("no suited challenge available")
+	}
+
+	return url, t, nil
 }
