@@ -1,7 +1,6 @@
 package client
 
 import (
-	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 
@@ -43,6 +42,7 @@ func (c *client) generateCertificateKeyPair() error {
 	return nil
 }
 
-func generateKeyPair() (crypto.Signer, error) {
+func generateKeyPair() (*rsa.PrivateKey, error) {
+	// TODO we only use rsa key from now on
 	return rsa.GenerateKey(rand.Reader, KeyBits)
 }

@@ -3,6 +3,7 @@ package client
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -75,15 +76,34 @@ func (c *client) submitOrder() error {
 	return nil
 }
 
-func (c *client) getOrder(url string) (order, error) {
-	var o order
-	_, err := c.send(url, c.kid, nil, http.StatusOK, &o)
-	if err != nil {
-		log.WithError(err).Error("Failed to get order.")
-		return order{}, err
+func (c *client) pollForOrderStatusChange(url string, respOrder *order) error {
+	for {
+		log.Debug("Polling for status...")
+
+		err := c.getOrder(url, respOrder)
+		if err != nil {
+			return err
+		}
+
+		if respOrder.Status == "valid" || respOrder.Status == "invalid" {
+			log.Debugf("Order status changed: %s", respOrder.Status)
+			break
+		}
+
+		time.Sleep(1 * time.Second)
 	}
 
-	return o, nil
+	return nil
+}
+
+func (c *client) getOrder(url string, respOrder *order) error {
+	_, err := c.send(url, c.kid, nil, http.StatusOK, respOrder)
+	if err != nil {
+		log.WithError(err).Error("Failed to get order.")
+		return err
+	}
+
+	return nil
 }
 
 func (c *client) finalizeOrder() error {

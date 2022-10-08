@@ -2,7 +2,7 @@ package client
 
 import (
 	"bytes"
-	"crypto"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -33,9 +33,8 @@ type client struct {
 	order         order           // placed order
 	orderURL      string          // URL to the placed order
 	auths         []authorization // any of these challenge has to be completed
-	certKey       crypto.Signer
+	certKey       *rsa.PrivateKey
 	cert          []byte
-	issuer        []byte
 }
 
 func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domains []string) *client {
@@ -127,8 +126,8 @@ func (c *client) IssueCertificate() error {
 		return err
 	}
 
-	// TODO may have to retry this until its ready
-	order, err := c.getOrder(c.orderURL)
+	var order order
+	err = c.pollForOrderStatusChange(c.orderURL, &order)
 	if err != nil {
 		return err
 	}
@@ -138,7 +137,13 @@ func (c *client) IssueCertificate() error {
 		return err
 	}
 
-	// TODO install cert
+	err = servers.RunCertificateServer(c.cert, c.certKey)
+	if err != nil {
+		return err
+	}
+
+	// TODO wait for certificate server to be up
+	time.Sleep(1 * time.Second)
 
 	return nil
 }

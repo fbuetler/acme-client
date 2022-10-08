@@ -67,7 +67,6 @@ func main() {
 		}
 	}
 
-	servers.RunCertificateServer()
 	servers.RunShutdownServer()
 }
 

@@ -41,13 +41,11 @@ func (c *client) downloadCert(o order) error {
 		return err
 	}
 
-	bodyBytes, err := io.ReadAll(resp.Body)
+	c.cert, err = io.ReadAll(resp.Body)
 	if err != nil {
 		log.WithError(err).Error("Failed to read response body.")
 		return err
 	}
-
-	c.cert, c.issuer = parseDownloadedCert(bodyBytes)
 
 	return nil
 }
