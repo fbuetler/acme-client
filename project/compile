@@ -1,3 +1,5 @@
 #!/bin/bash
+DIRECTORY=$(dirname "$0")
 
-echo "Compile your project here"
+echo "Compiling projcet..."
+go build -o $DIRECTORY/acme-client $DIRECTORY/../acme

@@ -8,16 +8,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type orderStatus string
-
-const (
-	ORDER_PENDING    orderStatus = "pending"
-	ORDER_READY      orderStatus = "ready"
-	ORDER_PROCESSING orderStatus = "processing"
-	ORDER_VALID      orderStatus = "valid"
-	ORDER_INVALID    orderStatus = "invalid"
-)
-
 // Each account object includes an "orders" URL from which a list of
 // orders created by the account can be fetched via POST-as-GET request.
 // The result of the request MUST be a JSON object whose "orders" field
@@ -30,7 +20,7 @@ type ordersList struct {
 // An ACME order object represents a client's request for a certificate
 // and is used to track the progress of that order through to issuance.
 type order struct {
-	Status            orderStatus  `json:"status,omitempty"`
+	Status            string       `json:"status,omitempty"`
 	Identifiers       []identifier `json:"identifiers,omitempty"`
 	AuthorizationURLs []string     `json:"authorizations,omitempty"`
 	FinalizeURL       string       `json:"finalize,omitempty"`

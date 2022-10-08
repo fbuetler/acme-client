@@ -6,22 +6,14 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"acme/src/jws"
-)
-
-type accountStatus string
-
-const (
-	ACCOUNT_VALID       accountStatus = "valid"
-	ACCOUNT_DEACTIVATED accountStatus = "deactivated"
-	ACCOUNT_REVOKED     accountStatus = "revoked"
+	"acme/jws"
 )
 
 // An ACME account resource represents a set of metadata associated with an account.
 type account struct {
-	Status               accountStatus `json:"status,omitempty"`
-	OrdersURL            string        `json:"orders,omitempty"`
-	TermsOfServiceAgreed bool          `json:"termsOfServiceAgreed,omitempty"`
+	Status               string `json:"status,omitempty"`
+	OrdersURL            string `json:"orders,omitempty"`
+	TermsOfServiceAgreed bool   `json:"termsOfServiceAgreed,omitempty"`
 }
 
 func (c *client) createAccount() error {

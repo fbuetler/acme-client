@@ -1,7 +1,5 @@
 #!/bin/bash
 DIRECTORY=$(dirname "$0")
-echo "Changing to ${DIRECTORY}"
-cd "$DIRECTORY" || exit 1
 
-echo "Running: acme $@"
-go run ../src "$@"
+echo "Running: acme-client $@"
+$DIRECTORY/acme-client "$@"

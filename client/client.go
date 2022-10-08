@@ -15,8 +15,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"acme/src/jws"
-	"acme/src/servers"
+	"acme/jws"
+	"acme/servers"
 )
 
 type empty struct{}
@@ -33,8 +33,8 @@ type client struct {
 	order         order           // placed order
 	orderURL      string          // URL to the placed order
 	auths         []authorization // any of these challenge has to be completed
-	certKey       *rsa.PrivateKey
-	cert          []byte
+	certKey       *rsa.PrivateKey // private key for the signed certificate
+	cert          []byte          // signed certificate
 }
 
 func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domains []string) *client {
@@ -105,7 +105,7 @@ func (c *client) IssueCertificate() error {
 		return err
 	}
 
-	// TODO wait for challenger server to be up
+	// TODO wait for challenge server to be up
 	time.Sleep(1 * time.Second)
 
 	err = c.respondToAuthorization(chalURL)

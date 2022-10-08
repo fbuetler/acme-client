@@ -6,7 +6,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"acme/src/jws"
+	"acme/jws"
 )
 
 const (

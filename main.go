@@ -8,8 +8,8 @@ import (
 	"github.com/jessevdk/go-flags"
 	log "github.com/sirupsen/logrus"
 
-	"acme/src/client"
-	"acme/src/servers"
+	"acme/client"
+	"acme/servers"
 )
 
 const (
