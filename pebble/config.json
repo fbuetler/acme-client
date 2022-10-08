@@ -4,8 +4,8 @@
     "managementListenAddress": "0.0.0.0:15000",
     "certificate": "certs/localhost/cert.pem",
     "privateKey": "certs/localhost/key.pem",
-    "httpPort": 6002,
-    "tlsPort": 6001,
+    "httpPort": 5002,
+    "tlsPort": 5001,
     "ocspResponderURL": "",
     "externalAccountBindingRequired": false,
     "retryAfter": {
