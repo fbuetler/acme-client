@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"acme/src/client"
+	"acme/src/servers"
 )
 
 const (
@@ -46,6 +47,8 @@ func main() {
 		log.Fatal(err)
 	}
 
+	servers.RunDNSServer(opts.Record)
+
 	rootCAs, err := loadThrustrootCert()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to load thrust root cert.")
@@ -64,10 +67,8 @@ func main() {
 		}
 	}
 
-	runDNSServer(opts.Record)
-	runChallengeServer()
-	runCertificateServer()
-	runShutdownServer()
+	servers.RunCertificateServer()
+	servers.RunShutdownServer()
 }
 
 func loadThrustrootCert() (*x509.CertPool, error) {

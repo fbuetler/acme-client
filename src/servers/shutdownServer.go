@@ -1,4 +1,4 @@
-package main
+package servers
 
 import (
 	"net/http"
@@ -10,7 +10,7 @@ const (
 	ShutdownPort = ":5003"
 )
 
-func runShutdownServer() error {
+func RunShutdownServer() error {
 	log.Info("Starting Shutdown server...")
 
 	shutdownMux := http.NewServeMux()

@@ -1,4 +1,4 @@
-package main
+package servers
 
 import (
 	"net/http"
@@ -10,7 +10,7 @@ const (
 	CertificatePort = ":5001"
 )
 
-func runCertificateServer() error {
+func RunCertificateServer() error {
 	log.Info("Starting Certificate server...")
 
 	certificateMux := http.NewServeMux()

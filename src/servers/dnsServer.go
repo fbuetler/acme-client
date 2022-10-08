@@ -1,4 +1,4 @@
-package main
+package servers
 
 import (
 	"net"
@@ -11,7 +11,7 @@ const (
 	DNSPort = ":10053"
 )
 
-func runDNSServer(record string) error {
+func RunDNSServer(record string) error {
 	log.Info("Starting DNS server...")
 
 	dnsMux := dns.NewServeMux()
@@ -41,5 +41,7 @@ func handleDNSrequest(record string) dns.HandlerFunc {
 			A:   net.ParseIP(record),
 		})
 		w.WriteMsg(&msg)
+
+		log.Infof("Responded to %s with %s", domain, record)
 	}
 }
