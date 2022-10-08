@@ -44,10 +44,21 @@ func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domai
 	}
 	tr := &http.Transport{TLSClientConfig: config}
 	httpClient := &http.Client{Transport: tr}
+
+	var ct string
+	switch challengeType {
+	case "http01":
+		ct = "http-01"
+	case "dns01":
+		ct = "dns-01"
+	default:
+		ct = "http-01" // or should it fail?
+	}
+
 	return &client{
 		httpClient:    *httpClient,
 		directoryURL:  directoryURL,
-		challengeType: challengeType,
+		challengeType: ct,
 		domains:       domains,
 	}
 }
