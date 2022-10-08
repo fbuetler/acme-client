@@ -2,4 +2,4 @@
 DIRECTORY=$(dirname "$0")
 
 echo "Compiling projcet..."
-go build -o $DIRECTORY/acme-client $DIRECTORY/../acme
+go build -o $DIRECTORY/acme-client $DIRECTORY/..
