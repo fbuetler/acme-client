@@ -44,17 +44,20 @@ type JWK struct { // order matters!
 }
 
 type Signer struct {
-	Signer   crypto.Signer
-	hash     crypto.Hash
-	algoritm string
+	Signer    *rsa.PrivateKey
+	PublicKey *rsa.PublicKey
+	hash      crypto.Hash
+	algoritm  string
 }
 
-func New(signer crypto.Signer) (*Signer, error) {
+func New(signer *rsa.PrivateKey) (*Signer, error) {
+	var publicKey *rsa.PublicKey
 	var hash crypto.Hash
 	var alg string
 
-	switch signer.Public().(type) {
+	switch pub := signer.Public().(type) {
 	case *rsa.PublicKey:
+		publicKey = pub
 		alg = "RS256"
 		hash = crypto.SHA256
 	default:
@@ -62,9 +65,10 @@ func New(signer crypto.Signer) (*Signer, error) {
 	}
 
 	return &Signer{
-		Signer:   signer,
-		hash:     hash,
-		algoritm: alg,
+		Signer:    signer,
+		PublicKey: publicKey,
+		hash:      hash,
+		algoritm:  alg,
 	}, nil
 }
 
@@ -117,19 +121,11 @@ func (jws *Signer) encodeHeader(nonce, targetURL, kid string) (string, error) {
 	}
 
 	if kid == NoKeyID {
-		var jwk *JWK
-		switch pub := jws.Signer.Public().(type) {
-		case *rsa.PublicKey:
-			jwk = &JWK{
-				Kty: "RSA",
-				N:   encodeBase64url(pub.N.Bytes()),
-				E:   encodeBase64url(big.NewInt(int64(pub.E)).Bytes()),
-			}
-		default:
-			return "", errors.New("unsupported key type")
+		h.JWK = &JWK{
+			Kty: "RSA",
+			N:   encodeBase64url(jws.PublicKey.N.Bytes()),
+			E:   encodeBase64url(big.NewInt(int64(jws.PublicKey.E)).Bytes()),
 		}
-
-		h.JWK = jwk
 	} else {
 		h.KID = kid
 	}
@@ -186,18 +182,11 @@ func marshallSegment(s interface{}) ([]byte, error) {
 	return json, nil
 }
 
-func ComputeKeyThumbprint(signer crypto.Signer) (string, error) {
-	// TODO: any prepended zero octets in the fields of a JWK object MUST be stripped before doing the computation
-	var jwk JWK
-	switch pub := signer.Public().(type) {
-	case *rsa.PublicKey:
-		jwk = JWK{
-			Kty: "RSA",
-			N:   encodeBase64url(pub.N.Bytes()),
-			E:   encodeBase64url(big.NewInt(int64(pub.E)).Bytes()),
-		}
-	default:
-		return "", errors.New("unsupported key type")
+func ComputeKeyThumbprint(signer *rsa.PrivateKey, publicKey *rsa.PublicKey) (string, error) {
+	jwk := JWK{
+		Kty: "RSA",
+		N:   encodeBase64url(publicKey.N.Bytes()),
+		E:   encodeBase64url(big.NewInt(int64(publicKey.E)).Bytes()),
 	}
 
 	json, err := marshallSegment(jwk)
@@ -206,7 +195,7 @@ func ComputeKeyThumbprint(signer crypto.Signer) (string, error) {
 	}
 	log.WithField("ordered JSON", string(json)).Debug("Marshalled account key.")
 
-	hasher := crypto.SHA256.New() // TODO maybe other hash function?
+	hasher := crypto.SHA256.New()
 	hasher.Write(json)
 	hash := hasher.Sum(nil)
 	log.Debug("Hashed marshalled account key.")

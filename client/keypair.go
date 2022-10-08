@@ -43,6 +43,5 @@ func (c *client) generateCertificateKeyPair() error {
 }
 
 func generateKeyPair() (*rsa.PrivateKey, error) {
-	// TODO we only use rsa key from now on
 	return rsa.GenerateKey(rand.Reader, KeyBits)
 }

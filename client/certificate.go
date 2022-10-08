@@ -2,8 +2,8 @@ package client
 
 import (
 	"bytes"
-	"crypto"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
@@ -16,7 +16,7 @@ import (
 
 // PKCS #10: Certification Request Syntax Specification
 // See https://www.rfc-editor.org/rfc/rfc2986
-func encodeCSR(signer crypto.Signer, domain string, sans []string) (string, error) {
+func encodeCSR(signer *rsa.PrivateKey, domain string, sans []string) (string, error) {
 	template := x509.CertificateRequest{
 		Subject: pkix.Name{
 			CommonName: domain,

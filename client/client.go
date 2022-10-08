@@ -200,7 +200,7 @@ func (c *client) generateKeyAuthorization(token string) (string, error) {
 
 	// token
 	// account key
-	keyThumbprint, err := jws.ComputeKeyThumbprint(c.signer.Signer)
+	keyThumbprint, err := jws.ComputeKeyThumbprint(c.signer.Signer, c.signer.PublicKey)
 	if err != nil {
 		log.WithError(err).Error("Failed to compute key thumbprint")
 		return "", err

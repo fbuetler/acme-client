@@ -21,7 +21,6 @@ type authorization struct {
 // An ACME challenge object represents a server's offer to validate a
 // client's possession of an identifier in a specific way.
 type challenge struct {
-	// content depends on challenge TODO -> RFC Section 8
 	Type      string `json:"type"`
 	URL       string `json:"url"`
 	Status    string `json:"status"`
