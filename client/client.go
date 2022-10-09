@@ -181,7 +181,7 @@ func (c *client) send(url, kid string, reqPayload interface{}, expectedStatusCod
 	}
 
 	if respPayload == nil {
-		log.Debug("Request succeeded. Returing without decoding.")
+		log.Debug("Request succeeded. Returning without decoding.")
 		return resp, nil
 	}
 

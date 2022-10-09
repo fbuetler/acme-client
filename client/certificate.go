@@ -1,18 +1,22 @@
 package client
 
 import (
-	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/pem"
+	"errors"
 	"io"
 	"net/http"
 
 	log "github.com/sirupsen/logrus"
 )
+
+type recvocation struct {
+	Certificate string `json:"certificate,omitempty"`
+}
 
 // PKCS #10: Certification Request Syntax Specification
 // See https://www.rfc-editor.org/rfc/rfc2986
@@ -50,15 +54,37 @@ func (c *client) downloadCert(o order) error {
 	return nil
 }
 
-// In order to provide easy interoperation with TLS, the first
-// certificate MUST be an end-entity certificate.  Each following
-// certificate SHOULD directly certify the one preceding it.
-// See https://www.rfc-editor.org/rfc/rfc8555#section-9.1
-func parseDownloadedCert(cert []byte) ([]byte, []byte) {
-	_, issuer := pem.Decode(cert)
-	return bytes.TrimSuffix(cert, issuer), issuer
+func (c *client) RevokeCert() error {
+	cert, err := parseCert(c.cert)
+	if err != nil {
+		log.WithError(err).Error("Failed to convert certificate to DER format.")
+		return err
+	}
+
+	url := c.dir.RevokeCertURL
+	r := recvocation{
+		Certificate: base64.RawURLEncoding.EncodeToString(cert.Raw),
+	}
+
+	_, err = c.send(url, c.kid, r, http.StatusOK, nil)
+	if err != nil {
+		log.WithError(err).Error("Failed to revoke certificate.")
+		return err
+	}
+
+	return nil
 }
 
-func (c *client) RevokeCert() error {
-	return nil
+func parseCert(certPEM []byte) (*x509.Certificate, error) {
+	block, _ := pem.Decode([]byte(certPEM))
+	if block == nil {
+		return nil, errors.New("failed to decode certificate")
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return cert, nil
 }
