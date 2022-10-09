@@ -11,19 +11,25 @@ const (
 	ChallengePathPrefix = "/.well-known/acme-challenge/"
 )
 
-func RunChallengeServer(token, keyThumbprint string) error {
+type Provision struct {
+	Token      string
+	Thumbprint string
+}
+
+func RunChallengeServer(ps []Provision) error {
 	log.Info("Starting Challenge server...")
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", handleHealth)
 
-	challengePath := ChallengePathPrefix + token
-
-	challengeMux := http.NewServeMux()
-	challengeMux.HandleFunc("/", handleHealth)
-	challengeMux.HandleFunc(challengePath, handleChallenge(keyThumbprint))
-	log.WithField("Path", challengePath).Debug("Published validation.")
+	for _, p := range ps {
+		path := ChallengePathPrefix + p.Token
+		mux.HandleFunc(path, handleChallenge(p.Thumbprint))
+		log.WithField("Path", path).Debug("Published validation.")
+	}
 
 	go func() {
 		log.Infof("Challenge server is listening on %s\n", ChallengePort)
-		if err := http.ListenAndServe(ChallengePort, challengeMux); err != nil {
+		if err := http.ListenAndServe(ChallengePort, mux); err != nil {
 			log.Fatalf("Failed to serve %s\n", err.Error())
 		}
 	}()

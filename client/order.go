@@ -41,19 +41,18 @@ type CSR struct {
 }
 
 func (c *client) submitOrder() error {
-	var o order
+	var identifiers []identifier
 	for _, d := range c.domains {
-		o = order{
-			Identifiers: []identifier{
-				{
-					Type:   "dns",
-					Values: d,
-				},
-			},
-		}
+		identifiers = append(identifiers, identifier{
+			Type:   "dns",
+			Values: d,
+		})
 	}
-	url := c.dir.NewOrderURL
+	o := order{
+		Identifiers: identifiers,
+	}
 
+	url := c.dir.NewOrderURL
 	resp, err := c.send(url, c.kid, o, http.StatusCreated, &c.order)
 	if err != nil {
 		log.WithError(err).Error("Failed to submit order.")

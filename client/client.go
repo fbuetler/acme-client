@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -88,33 +87,10 @@ func (c *client) IssueCertificate() error {
 		return err
 	}
 
-	chalURL, token, err := c.getChallenge()
+	err = c.solveChallenge()
 	if err != nil {
 		return err
 	}
-
-	keyAuthorization, err := c.generateKeyAuthorization(token)
-	if err != nil {
-		return err
-	}
-
-	// TODO run dns challenger server in case of dns-01
-	// TODO tear down after challenge verfication
-	err = servers.RunChallengeServer(token, keyAuthorization)
-	if err != nil {
-		return err
-	}
-
-	// TODO wait for challenge server to be up
-	time.Sleep(1 * time.Second)
-
-	err = c.respondToAuthorization(chalURL)
-	if err != nil {
-		return err
-	}
-
-	// TODO give some time to verify the challenge
-	time.Sleep(5 * time.Second)
 
 	err = c.pollForAuthStatusChange()
 	if err != nil {
@@ -194,39 +170,4 @@ func (c *client) send(url, kid string, reqPayload interface{}, expectedStatusCod
 
 	log.Debug("Request succeeded.")
 	return resp, nil
-}
-
-func (c *client) generateKeyAuthorization(token string) (string, error) {
-
-	// token
-	// account key
-	keyThumbprint, err := jws.ComputeKeyThumbprint(c.signer.Signer, c.signer.PublicKey)
-	if err != nil {
-		log.WithError(err).Error("Failed to compute key thumbprint")
-		return "", err
-	}
-
-	keyAuthorization := strings.Join([]string{token, keyThumbprint}, ".")
-	log.Debug("Computed key authorization.")
-
-	return keyAuthorization, nil
-}
-
-func (c *client) getChallenge() (string, string, error) {
-	var url string
-	var t string
-	for _, a := range c.auths {
-		for _, chal := range a.Challenges {
-			if chal.Type == c.challengeType {
-				t = chal.Token
-				url = chal.URL
-			}
-		}
-	}
-
-	if len(t) == 0 {
-		return "", "", errors.New("no suited challenge available")
-	}
-
-	return url, t, nil
 }
