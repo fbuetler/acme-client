@@ -57,24 +57,24 @@ func (c *client) respondToAuthorization(url string) error {
 }
 
 func (c *client) pollForAuthStatusChange() error {
-	url := c.order.AuthorizationURLs[0] // TODO hacky
+	for _, url := range c.order.AuthorizationURLs {
+		for {
+			log.Debug("Polling for status...")
 
-	for {
-		log.Debug("Polling for status...")
+			var auth authorization
+			_, err := c.send(url, c.kid, nil, http.StatusOK, &auth)
+			if err != nil {
+				log.WithError(err).Error("Failed to fetch authorization.")
+				return err
+			}
 
-		var auth authorization
-		_, err := c.send(url, c.kid, nil, http.StatusOK, &auth)
-		if err != nil {
-			log.WithError(err).Error("Failed to fetch authorization.")
-			return err
+			if auth.Status == "valid" || auth.Status == "invalid" {
+				log.Debugf("Authorization status changed: %s", auth.Status)
+				break
+			}
+
+			time.Sleep(1 * time.Second)
 		}
-
-		if auth.Status == "valid" || auth.Status == "invalid" {
-			log.Debugf("Authorization status changed: %s", auth.Status)
-			break
-		}
-
-		time.Sleep(1 * time.Second)
 	}
 
 	return nil
