@@ -11,14 +11,16 @@ import (
 )
 
 const (
-	CertificatePort = ":5001"
+	certificatePort = ":5001"
 )
 
-func RunCertificateServer(cert []byte, certKey *rsa.PrivateKey) error {
-	log.Info("Starting Certificate server...")
+func RunCertificateServer(close chan struct{}, cert []byte, certKey *rsa.PrivateKey) error {
+	l := log.WithField("component", "certificate server")
 
-	certificateMux := http.NewServeMux()
-	certificateMux.HandleFunc("/", handleCertificate)
+	l.Info("Starting Certificate server...")
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", handleCertificate)
 
 	certPEM, err := tls.X509KeyPair(cert, pem.EncodeToMemory(
 		&pem.Block{
@@ -31,18 +33,24 @@ func RunCertificateServer(cert []byte, certKey *rsa.PrivateKey) error {
 	}
 
 	srv := http.Server{
-		Addr: CertificatePort,
+		Addr: certificatePort,
 		TLSConfig: &tls.Config{
 			Certificates: []tls.Certificate{certPEM},
 		},
-		Handler: certificateMux,
+		Handler: mux,
 	}
 
 	go func() {
-		log.Infof("Certificate server is listening on %s\n", CertificatePort)
+		l.Infof("Certificate server is listening on %s\n", certificatePort)
 		if err := srv.ListenAndServeTLS("", ""); err != nil {
-			log.Fatalf("Failed to serve %s\n", err.Error())
+			l.Errorf("Failed to serve %s\n", err.Error())
 		}
+	}()
+
+	go func() {
+		<-close
+		l.Info("Received shutdown signal. Terminating...")
+		srv.Close()
 	}()
 
 	return nil

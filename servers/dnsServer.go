@@ -8,28 +8,36 @@ import (
 )
 
 const (
-	DNSPort = ":10053"
+	dnsPort = ":10053"
 )
 
-func RunDNSServer(record string) error {
-	log.Info("Starting DNS server...")
+func RunDNSServer(close chan struct{}, record string) error {
+	l := log.WithField("component", "DNS server")
+
+	l.Info("Starting DNS server...")
 
 	dnsMux := dns.NewServeMux()
-	dnsMux.HandleFunc(".", handleDNSrequest(record))
+	dnsMux.HandleFunc(".", handleDNSrequest(l, record))
 
-	srv := &dns.Server{Addr: DNSPort, Net: "udp", Handler: dnsMux}
+	srv := &dns.Server{Addr: dnsPort, Net: "udp", Handler: dnsMux}
 
 	go func() {
-		log.Infof("DNS server is listening on %s\n", DNSPort)
+		l.Infof("DNS server is listening on %s\n", dnsPort)
 		if err := srv.ListenAndServe(); err != nil {
-			log.Fatalf("Failed to set udp listener %s\n", err.Error())
+			l.Errorf("Failed to set udp listener %s\n", err.Error())
 		}
+	}()
+
+	go func() {
+		<-close
+		l.Info("Received shutdown signal. Terminating...")
+		srv.Shutdown()
 	}()
 
 	return nil
 }
 
-func handleDNSrequest(record string) dns.HandlerFunc {
+func handleDNSrequest(l *log.Entry, record string) dns.HandlerFunc {
 	// all queries will be answered with the provided record
 	return func(w dns.ResponseWriter, r *dns.Msg) {
 		msg := dns.Msg{}
@@ -42,6 +50,6 @@ func handleDNSrequest(record string) dns.HandlerFunc {
 		})
 		w.WriteMsg(&msg)
 
-		log.Infof("Responded to %s with %s", domain, record)
+		l.Infof("Responded to %s with %s", domain, record)
 	}
 }

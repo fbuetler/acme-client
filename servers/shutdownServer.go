@@ -10,24 +10,49 @@ const (
 	ShutdownPort = ":5003"
 )
 
-func RunShutdownServer() error {
-	log.Info("Starting Shutdown server...")
+func RunShutdownServer(closeDNSServer, closeCertServer, closeChalServer chan struct{}) error {
+	l := log.WithField("component", "shutdown server")
 
-	shutdownMux := http.NewServeMux()
-	shutdownMux.HandleFunc("/shutdown", handleShutdown)
+	l.Info("Starting Shutdown server...")
 
-	// go func() {
-	log.Infof("Shutdown server is listening on %s\n", ShutdownPort)
-	if err := http.ListenAndServe(ShutdownPort, shutdownMux); err != nil {
-		log.Fatalf("Failed to serve %s\n", err.Error())
+	close := make(chan struct{}, 1)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/shutdown", handleShutdown(l, close, closeDNSServer, closeCertServer, closeChalServer))
+
+	srv := http.Server{
+		Addr:    ShutdownPort,
+		Handler: mux,
 	}
-	// }()
+
+	go func() {
+		<-close
+		l.Info("Received shutdown signal. Terminating...")
+		srv.Close()
+	}()
+
+	l.Infof("Shutdown server is listening on %s\n", ShutdownPort)
+	if err := srv.ListenAndServe(); err != nil {
+		l.Errorf("Failed to serve %s\n", err.Error())
+	}
 
 	return nil
 }
 
-func handleShutdown(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Shutdown Server OK"))
-	// TODO shutdown all other servers
+func handleShutdown(l *log.Entry, closeShutdownServer, closeDNSServer, closeCertServer, closeChalServer chan struct{}) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Shutdown Server OK"))
+
+		l.Debug("Sending shutdown signal to certificate server.")
+		closeCertServer <- struct{}{}
+
+		l.Debug("Sending shutdown signal to challenge server.")
+		closeChalServer <- struct{}{}
+
+		l.Debug("Sending shutdown signal to DNS server.")
+		closeDNSServer <- struct{}{}
+
+		l.Debug("Sending shutdown signal to myself.")
+		closeShutdownServer <- struct{}{}
+	}
 }

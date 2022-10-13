@@ -1,16 +1,17 @@
 package client
 
 import (
-	"acme/jws"
-	"acme/servers"
 	"crypto/rsa"
 	"errors"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
+
+	"acme/jws"
+	"acme/servers"
 )
 
-func (c *client) solveChallenge() error {
+func (c *client) solveChallenge(closeChalServer chan struct{}) error {
 	var urls []string
 	var ps []servers.Provision
 	for _, a := range c.auths {
@@ -30,7 +31,7 @@ func (c *client) solveChallenge() error {
 
 	// TODO run dns challenger server in case of dns-01
 	// TODO tear down after challenge verfication
-	err := servers.RunChallengeServer(ps)
+	err := servers.RunChallengeServer(closeChalServer, ps)
 	if err != nil {
 		return err
 	}

@@ -47,7 +47,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	servers.RunDNSServer(opts.Record)
+	closeDNSServer := make(chan struct{}, 1)
+	closeCertServer := make(chan struct{}, 1)
+	closeChalServer := make(chan struct{}, 1)
+
+	servers.RunDNSServer(closeDNSServer, opts.Record)
 
 	rootCAs, err := loadThrustrootCert()
 	if err != nil {
@@ -55,7 +59,7 @@ func main() {
 	}
 
 	c := client.NewClient(rootCAs, opts.Dir, opts.Positional.ChallengeType, opts.Domains)
-	err = c.IssueCertificate()
+	err = c.IssueCertificate(closeCertServer, closeChalServer)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to issue certificate.")
 	}
@@ -67,7 +71,7 @@ func main() {
 		}
 	}
 
-	servers.RunShutdownServer()
+	servers.RunShutdownServer(closeDNSServer, closeCertServer, closeChalServer)
 }
 
 func loadThrustrootCert() (*x509.CertPool, error) {

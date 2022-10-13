@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	ChallengePort       = ":5002"
-	ChallengePathPrefix = "/.well-known/acme-challenge/"
+	challengePort       = ":5002"
+	challengePathPrefix = "/.well-known/acme-challenge/"
 )
 
 type Provision struct {
@@ -16,40 +16,52 @@ type Provision struct {
 	Thumbprint string
 }
 
-func RunChallengeServer(ps []Provision) error {
-	log.Info("Starting Challenge server...")
+func RunChallengeServer(close chan struct{}, ps []Provision) error {
+	l := log.WithField("component", "challenge server")
+
+	l.Info("Starting Challenge server...")
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", handleHealth)
+	mux.HandleFunc("/", handleHealth(l))
 
 	for _, p := range ps {
-		path := ChallengePathPrefix + p.Token
-		mux.HandleFunc(path, handleChallenge(p.Thumbprint))
-		log.WithField("Path", path).Debug("Published validation.")
+		path := challengePathPrefix + p.Token
+		mux.HandleFunc(path, handleChallenge(l, p.Thumbprint))
+		l.WithField("Path", path).Debug("Published validation.")
 	}
 
+	srv := &http.Server{Addr: challengePort, Handler: mux}
+
 	go func() {
-		log.Infof("Challenge server is listening on %s\n", ChallengePort)
-		if err := http.ListenAndServe(ChallengePort, mux); err != nil {
-			log.Fatalf("Failed to serve %s\n", err.Error())
+		l.Infof("Challenge server is listening on %s\n", challengePort)
+		if err := srv.ListenAndServe(); err != nil {
+			l.Errorf("Failed to serve %s\n", err.Error())
 		}
+	}()
+
+	go func() {
+		<-close
+		l.Info("Received shutdown signal. Terminating...")
+		srv.Close()
 	}()
 
 	return nil
 }
 
-func handleHealth(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Challenger Server OK"))
+func handleHealth(l *log.Entry) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Challenger Server OK"))
 
-	log.Info(("Answered health request."))
+		l.Info(("Answered health request."))
+	}
 }
 
-func handleChallenge(keyThumbprint string) http.HandlerFunc {
+func handleChallenge(l *log.Entry, keyThumbprint string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Write([]byte(keyThumbprint))
 
-		log.Info("Answered challenge request.")
+		l.Info("Answered challenge request.")
 	}
 }

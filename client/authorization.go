@@ -37,7 +37,6 @@ func (c *client) fetchAuthorizations() error {
 			return err
 		}
 
-		// TODO maybe only save auths where the challenge type matches
 		c.auths = append(c.auths, auth)
 	}
 

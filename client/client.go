@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -61,7 +60,7 @@ func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domai
 	}
 }
 
-func (c *client) IssueCertificate() error {
+func (c *client) IssueCertificate(closeCertServer, closeChalServer chan struct{}) error {
 	err := c.generateAccountKeypair()
 	if err != nil {
 		return err
@@ -87,7 +86,7 @@ func (c *client) IssueCertificate() error {
 		return err
 	}
 
-	err = c.solveChallenge()
+	err = c.solveChallenge(closeChalServer)
 	if err != nil {
 		return err
 	}
@@ -113,13 +112,10 @@ func (c *client) IssueCertificate() error {
 		return err
 	}
 
-	err = servers.RunCertificateServer(c.cert, c.certKey)
+	err = servers.RunCertificateServer(closeCertServer, c.cert, c.certKey)
 	if err != nil {
 		return err
 	}
-
-	// TODO wait for certificate server to be up
-	time.Sleep(1 * time.Second)
 
 	return nil
 }
