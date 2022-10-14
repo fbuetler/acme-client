@@ -47,21 +47,17 @@ func main() {
 		log.Fatal(err)
 	}
 
-	dnsChallenge := make(chan servers.DNSProvision, 1)
-
 	closeDNSServer := make(chan struct{}, 1)
 	closeCertServer := make(chan struct{}, 1)
 	closeChalServer := make(chan struct{}, 1)
-
-	servers.RunDNSServer(closeDNSServer, dnsChallenge, opts.Record)
 
 	rootCAs, err := loadThrustrootCert()
 	if err != nil {
 		log.WithError(err).Fatal("Failed to load thrust root cert.")
 	}
 
-	c := client.NewClient(rootCAs, opts.Dir, opts.Positional.ChallengeType, opts.Domains)
-	err = c.IssueCertificate(dnsChallenge, closeCertServer, closeChalServer)
+	c := client.NewClient(rootCAs, opts.Dir, opts.Positional.ChallengeType, opts.Domains, opts.Record)
+	err = c.IssueCertificate(closeDNSServer, closeCertServer, closeChalServer)
 	if err != nil {
 		log.WithError(err).Fatal("Failed to issue certificate.")
 	}

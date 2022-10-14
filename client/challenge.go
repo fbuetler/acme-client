@@ -20,7 +20,7 @@ type provision struct {
 	url     string
 }
 
-func (c *client) solveChallenge(dnsChallenge chan servers.DNSProvision, closeChalServer chan struct{}) error {
+func (c *client) solveChallenge(closeDNSServer chan struct{}, closeChalServer chan struct{}) error {
 	var ps []provision
 	for _, a := range c.auths {
 		url, token, err := getChallenge(a.Challenges, c.challengeType)
@@ -46,8 +46,13 @@ func (c *client) solveChallenge(dnsChallenge chan servers.DNSProvision, closeCha
 		if err != nil {
 			return err
 		}
+
+		err = solveDNSchallenge(closeDNSServer, nil, c.record)
+		if err != nil {
+			return err
+		}
 	} else if c.challengeType == DNSchallenge {
-		err := solveDNSchallenge(dnsChallenge, ps)
+		err := solveDNSchallenge(closeDNSServer, ps, c.record)
 		if err != nil {
 			return err
 		}
@@ -85,17 +90,20 @@ func solveHTTPchallenge(closeChalServer chan struct{}, provisions []provision) e
 	return nil
 }
 
-func solveDNSchallenge(dnsChallenge chan servers.DNSProvision, provisions []provision) error {
+func solveDNSchallenge(closeDNSServer chan struct{}, provisions []provision, record string) error {
+	var ps []servers.DNSProvision
 	for _, p := range provisions {
 		hasher := crypto.SHA256.New()
 		hasher.Write([]byte(p.keyAuth))
 		keyAuthDigest := hasher.Sum(nil)
 
-		dnsChallenge <- servers.DNSProvision{
+		ps = append(ps, servers.DNSProvision{
 			Domain:  p.domain,
 			KeyAuth: base64.RawURLEncoding.EncodeToString(keyAuthDigest),
-		}
+		})
 	}
+
+	servers.RunDNSServer(closeDNSServer, ps, record)
 
 	return nil
 }

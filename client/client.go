@@ -26,22 +26,27 @@ const (
 type empty struct{}
 
 type client struct {
-	httpClient    http.Client     // http client used for all requests to the ACME server
-	directoryURL  string          // directory URL to bootstrap the client configuration
-	challengeType string          // challenge type that should be used
-	domains       []string        // domains to issue a certificate for
-	signer        *jws.Signer     // signing key
-	dir           dir             // directory with the client configuration
-	account       account         // account connected with the key pair above
-	kid           string          // URL to the account
-	order         order           // placed order
-	orderURL      string          // URL to the placed order
-	auths         []authorization // any of these challenge has to be completed
-	certKey       *rsa.PrivateKey // private key for the signed certificate
-	cert          []byte          // signed certificate
+	record        string   // IP record to be returned by the DNS server for any request
+	challengeType string   // challenge type that should be used
+	domains       []string // domains to issue a certificate for
+
+	httpClient   http.Client // http client used for all requests to the ACME server
+	dir          dir         // directory with the client configuration
+	directoryURL string      // directory URL to bootstrap the client configuration
+	orderURL     string      // URL to the placed order
+
+	signer  *jws.Signer // signing key
+	account account     // account connected with the key pair above
+	kid     string      // key ID to the account
+
+	order order           // placed order
+	auths []authorization // any of these challenge has to be completed
+
+	certKey *rsa.PrivateKey // private key for the signed certificate
+	cert    []byte          // signed certificate
 }
 
-func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domains []string) *client {
+func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domains []string, record string) *client {
 	config := &tls.Config{
 		RootCAs: rootCAs,
 	}
@@ -56,17 +61,19 @@ func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domai
 		ct = DNSchallenge
 	default:
 		ct = HTTPchallenge // or should it fail?
+		log.WithField("challenge type", challengeType).Error("invalid challenge type specified")
 	}
 
 	return &client{
 		httpClient:    *httpClient,
-		directoryURL:  directoryURL,
+		record:        record,
 		challengeType: ct,
 		domains:       domains,
+		directoryURL:  directoryURL,
 	}
 }
 
-func (c *client) IssueCertificate(dnsChallenge chan servers.DNSProvision, closeCertServer, closeChalServer chan struct{}) error {
+func (c *client) IssueCertificate(closeDNSServer, closeCertServer, closeChalServer chan struct{}) error {
 	err := c.generateAccountKeypair()
 	if err != nil {
 		return err
@@ -92,7 +99,7 @@ func (c *client) IssueCertificate(dnsChallenge chan servers.DNSProvision, closeC
 		return err
 	}
 
-	err = c.solveChallenge(dnsChallenge, closeChalServer)
+	err = c.solveChallenge(closeDNSServer, closeChalServer)
 	if err != nil {
 		return err
 	}

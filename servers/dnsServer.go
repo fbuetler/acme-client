@@ -18,12 +18,21 @@ type DNSProvision struct {
 	KeyAuth string
 }
 
-func RunDNSServer(close chan struct{}, ps chan DNSProvision, record string) error {
+func RunDNSServer(close chan struct{}, ps []DNSProvision, record string) error {
 	l := log.WithField("component", "DNS server")
 
 	l.Info("Starting DNS server...")
 
 	keyAuths := map[string][]string{}
+	for _, p := range ps {
+		d := challengeDomainPrefix + p.Domain
+		if !strings.HasSuffix(p.Domain, ".") {
+			d += "."
+		}
+		keyAuths[d] = append(keyAuths[d], p.KeyAuth) // append only otherwise a lock is required
+		l.WithField("Domain", p.Domain).Info("Published validation.")
+	}
+
 	dnsMux := dns.NewServeMux()
 	dnsMux.HandleFunc(".", handleDNSrequest(l, record, keyAuths))
 
@@ -33,18 +42,6 @@ func RunDNSServer(close chan struct{}, ps chan DNSProvision, record string) erro
 		l.Infof("DNS server is listening on %s\n", dnsPort)
 		if err := srv.ListenAndServe(); err != nil {
 			l.Errorf("Failed to set udp listener %s\n", err.Error())
-		}
-	}()
-
-	go func() {
-		// TODO shutdown mechanism
-		// TODO delete txt records after challenge verfication
-		for {
-			p := <-ps
-			// TODO the following dot suffix may break things
-			d := challengeDomainPrefix + p.Domain + "."
-			keyAuths[d] = append(keyAuths[d], p.KeyAuth) // append only otherwise a lock is required
-			l.WithField("Domain", p.Domain).WithField("Key auth", p.KeyAuth).Info("Received a provision.")
 		}
 	}()
 
