@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -69,6 +70,12 @@ func (c *client) pollForAuthStatusChange() error {
 
 			if auth.Status == "valid" || auth.Status == "invalid" {
 				log.Infof("Authorization status changed: %s", auth.Status)
+
+				if auth.Status == "invalid" {
+					err = errors.New("invalid authorization")
+					log.WithError(err).Error("Authorization failed.")
+					return err
+				}
 				break
 			}
 

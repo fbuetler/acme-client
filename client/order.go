@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -76,6 +77,12 @@ func (c *client) pollForOrderStatusChange(url string, respOrder *order) error {
 
 		if respOrder.Status == "valid" || respOrder.Status == "invalid" {
 			log.Infof("Order status changed: %s", respOrder.Status)
+
+			if respOrder.Status == "invalid" {
+				err = errors.New("invalid order")
+				log.WithError(err).Error("Order failed.")
+				return err
+			}
 			break
 		}
 
