@@ -55,27 +55,6 @@ func (c *client) downloadCert(o order) error {
 	return nil
 }
 
-func (c *client) RevokeCert() error {
-	cert, err := parseCert(c.cert)
-	if err != nil {
-		log.WithError(err).Error("Failed to convert certificate to DER format.")
-		return err
-	}
-
-	url := c.dir.RevokeCertURL
-	r := recvocation{
-		Certificate: base64.RawURLEncoding.EncodeToString(cert.Raw),
-	}
-
-	_, err = c.send(url, c.kid, r, http.StatusOK, nil)
-	if err != nil {
-		log.WithError(err).Error("Failed to revoke certificate.")
-		return err
-	}
-
-	return nil
-}
-
 func parseCert(certPEM []byte) (*x509.Certificate, error) {
 	block, _ := pem.Decode([]byte(certPEM))
 	if block == nil {
