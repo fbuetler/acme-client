@@ -21,6 +21,6 @@ func (c *client) getNonce() (string, error) {
 		return "", err
 	}
 
-	log.WithField("nonce", nonce).Debug("Received nonce.")
+	// log.WithField("nonce", nonce).Debug("Received nonce.")
 	return nonce, nil
 }

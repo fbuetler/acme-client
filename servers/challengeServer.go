@@ -11,12 +11,12 @@ const (
 	challengePathPrefix = "/.well-known/acme-challenge/"
 )
 
-type Provision struct {
+type HTTPProvision struct {
 	Token      string
 	Thumbprint string
 }
 
-func RunChallengeServer(close chan struct{}, ps []Provision) error {
+func RunChallengeServer(close chan struct{}, ps []HTTPProvision) error {
 	l := log.WithField("component", "challenge server")
 
 	l.Info("Starting Challenge server...")

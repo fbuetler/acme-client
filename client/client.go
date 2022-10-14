@@ -17,6 +17,11 @@ import (
 	"acme/servers"
 )
 
+const (
+	HTTPchallenge = "http-01"
+	DNSchallenge  = "dns-01"
+)
+
 type empty struct{}
 
 type client struct {
@@ -45,11 +50,11 @@ func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domai
 	var ct string
 	switch challengeType {
 	case "http01":
-		ct = "http-01"
+		ct = HTTPchallenge
 	case "dns01":
-		ct = "dns-01"
+		ct = DNSchallenge
 	default:
-		ct = "http-01" // or should it fail?
+		ct = HTTPchallenge // or should it fail?
 	}
 
 	return &client{
@@ -60,7 +65,7 @@ func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domai
 	}
 }
 
-func (c *client) IssueCertificate(closeCertServer, closeChalServer chan struct{}) error {
+func (c *client) IssueCertificate(dnsChallenge chan servers.DNSProvision, closeCertServer, closeChalServer chan struct{}) error {
 	err := c.generateAccountKeypair()
 	if err != nil {
 		return err
@@ -86,12 +91,7 @@ func (c *client) IssueCertificate(closeCertServer, closeChalServer chan struct{}
 		return err
 	}
 
-	err = c.solveChallenge(closeChalServer)
-	if err != nil {
-		return err
-	}
-
-	err = c.pollForAuthStatusChange()
+	err = c.solveChallenge(dnsChallenge, closeChalServer)
 	if err != nil {
 		return err
 	}
@@ -153,7 +153,7 @@ func (c *client) send(url, kid string, reqPayload interface{}, expectedStatusCod
 	}
 
 	if respPayload == nil {
-		log.Debug("Request succeeded. Returning without decoding.")
+		// log.Debug("Request succeeded. Returning without decoding.")
 		return resp, nil
 	}
 
@@ -164,6 +164,6 @@ func (c *client) send(url, kid string, reqPayload interface{}, expectedStatusCod
 	}
 	log.WithField("payload", fmt.Sprintf("%+v", respPayload)).Debug("Received response.")
 
-	log.Debug("Request succeeded.")
+	// log.Debug("Request succeeded.")
 	return resp, nil
 }

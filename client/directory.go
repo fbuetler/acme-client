@@ -31,6 +31,6 @@ func (c *client) loadDirectory() error {
 		return err
 	}
 
-	log.WithFields(log.Fields{"directory": fmt.Sprintf("%+v", c.dir)}).Debug("Received directory.")
+	log.WithFields(log.Fields{"directory": fmt.Sprintf("%+v", c.dir)}).Info("Received directory.")
 	return nil
 }

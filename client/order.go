@@ -61,13 +61,13 @@ func (c *client) submitOrder() error {
 
 	c.orderURL = resp.Header.Get("Location")
 
-	log.WithFields(log.Fields{"order": fmt.Sprintf("%+v", c.order)}).Debug("Order submitted.")
+	log.WithFields(log.Fields{"order": fmt.Sprintf("%+v", c.order)}).Info("Order submitted.")
 	return nil
 }
 
 func (c *client) pollForOrderStatusChange(url string, respOrder *order) error {
 	for {
-		log.Debug("Polling for status...")
+		log.Info("Polling for status...")
 
 		err := c.getOrder(url, respOrder)
 		if err != nil {
@@ -75,7 +75,7 @@ func (c *client) pollForOrderStatusChange(url string, respOrder *order) error {
 		}
 
 		if respOrder.Status == "valid" || respOrder.Status == "invalid" {
-			log.Debugf("Order status changed: %s", respOrder.Status)
+			log.Infof("Order status changed: %s", respOrder.Status)
 			break
 		}
 
@@ -127,6 +127,6 @@ func (c *client) finalizeOrder() error {
 		return err
 	}
 
-	log.WithFields(log.Fields{"order": fmt.Sprintf("%+v", o)}).Debug("Order finalized.")
+	log.WithFields(log.Fields{"order": fmt.Sprintf("%+v", o)}).Info("Order finalized.")
 	return nil
 }

@@ -30,6 +30,6 @@ func (c *client) createAccount() error {
 
 	c.kid = resp.Header.Get("Location")
 
-	log.WithFields(log.Fields{"account": fmt.Sprintf("%+v", c.account)}).Debug("Account created.")
+	log.WithFields(log.Fields{"account": fmt.Sprintf("%+v", c.account)}).Info("Account created.")
 	return nil
 }

@@ -51,6 +51,7 @@ func (c *client) downloadCert(o order) error {
 		return err
 	}
 
+	log.Info("Downloaded issued certificate.")
 	return nil
 }
 

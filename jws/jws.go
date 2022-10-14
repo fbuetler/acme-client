@@ -150,7 +150,7 @@ func (jws *Signer) computeSignature(p []byte) (string, error) {
 	}
 
 	signature := encodeBase64url(signBytes)
-	log.Debug("Computed signature.")
+	// log.Debug("Computed signature.")
 
 	return signature, nil
 }
@@ -166,7 +166,7 @@ func marshalAndEncodeSegment(s interface{}) (string, error) {
 	}
 
 	encoded := encodeBase64url(json)
-	log.Debug("Encoded segment.")
+	// log.Debug("Encoded segment.")
 
 	return encoded, nil
 }
@@ -177,7 +177,7 @@ func marshallSegment(s interface{}) ([]byte, error) {
 		log.WithFields(log.Fields{"segment": fmt.Sprintf("%+v", s)}).WithError(err).Error("Failed to marshall segment.")
 		return nil, err
 	}
-	log.Debug("Marshalled segment.")
+	// log.Debug("Marshalled segment.")
 
 	return json, nil
 }
@@ -193,19 +193,20 @@ func ComputeKeyThumbprint(signer *rsa.PrivateKey, publicKey *rsa.PublicKey) (str
 	if err != nil {
 		return "", err
 	}
-	log.WithField("ordered JSON", string(json)).Debug("Marshalled account key.")
+	// log.WithField("ordered JSON", string(json)).Debug("Marshalled account key.")
 
 	hasher := crypto.SHA256.New()
 	hasher.Write(json)
 	hash := hasher.Sum(nil)
-	log.Debug("Hashed marshalled account key.")
+	// log.Debug("Hashed marshalled account key.")
 
 	encoded := encodeBase64url(hash)
-	log.Debug("Encoded hashed marshalled account key.")
+	// log.Debug("Encoded hashed marshalled account key.")
 
 	return encoded, nil
 }
 
+// TODO maybe we dont need this anymore
 func encodeBase64url(seg []byte) string {
 	return base64.RawURLEncoding.EncodeToString(seg)
 }

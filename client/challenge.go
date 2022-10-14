@@ -1,7 +1,9 @@
 package client
 
 import (
+	"crypto"
 	"crypto/rsa"
+	"encoding/base64"
 	"errors"
 	"strings"
 
@@ -11,35 +13,87 @@ import (
 	"acme/servers"
 )
 
-func (c *client) solveChallenge(closeChalServer chan struct{}) error {
-	var urls []string
-	var ps []servers.Provision
+type provision struct {
+	domain  string
+	keyAuth string
+	token   string
+	url     string
+}
+
+func (c *client) solveChallenge(dnsChallenge chan servers.DNSProvision, closeChalServer chan struct{}) error {
+	var ps []provision
 	for _, a := range c.auths {
 		url, token, err := getChallenge(a.Challenges, c.challengeType)
 		if err != nil {
 			return err
 		}
 
-		thumbprint, err := generateKeyAuthorization(c.signer.Signer, &c.signer.Signer.PublicKey, token)
+		keyAuth, err := generateKeyAuthorization(c.signer.Signer, &c.signer.Signer.PublicKey, token)
 		if err != nil {
 			return err
 		}
 
-		ps = append(ps, servers.Provision{Token: token, Thumbprint: thumbprint})
-		urls = append(urls, url)
+		ps = append(ps, provision{
+			domain:  a.Identifier.Values,
+			keyAuth: keyAuth,
+			token:   token,
+			url:     url,
+		})
 	}
 
-	// TODO run dns challenger server in case of dns-01
+	if c.challengeType == HTTPchallenge {
+		err := solveHTTPchallenge(closeChalServer, ps)
+		if err != nil {
+			return err
+		}
+	} else if c.challengeType == DNSchallenge {
+		err := solveDNSchallenge(dnsChallenge, ps)
+		if err != nil {
+			return err
+		}
+	} else {
+		return errors.New("unknown challenge type")
+	}
+
+	for _, p := range ps {
+		err := c.respondToAuthorization(p.url)
+		if err != nil {
+			return err
+		}
+	}
+
+	err := c.pollForAuthStatusChange()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func solveHTTPchallenge(closeChalServer chan struct{}, provisions []provision) error {
+	var ps []servers.HTTPProvision
+	for _, p := range provisions {
+		ps = append(ps, servers.HTTPProvision{Token: p.token, Thumbprint: p.keyAuth})
+	}
+
 	// TODO tear down after challenge verfication
 	err := servers.RunChallengeServer(closeChalServer, ps)
 	if err != nil {
 		return err
 	}
 
-	for _, url := range urls {
-		err = c.respondToAuthorization(url)
-		if err != nil {
-			return err
+	return nil
+}
+
+func solveDNSchallenge(dnsChallenge chan servers.DNSProvision, provisions []provision) error {
+	for _, p := range provisions {
+		hasher := crypto.SHA256.New()
+		hasher.Write([]byte(p.keyAuth))
+		keyAuthDigest := hasher.Sum(nil)
+
+		dnsChallenge <- servers.DNSProvision{
+			Domain:  p.domain,
+			KeyAuth: base64.RawURLEncoding.EncodeToString(keyAuthDigest),
 		}
 	}
 
@@ -71,7 +125,7 @@ func generateKeyAuthorization(signer *rsa.PrivateKey, publicKey *rsa.PublicKey, 
 	}
 
 	keyAuthorization := strings.Join([]string{token, keyThumbprint}, ".")
-	log.Debug("Computed key authorization.")
+	// log.Debug("Computed key authorization.")
 
 	return keyAuthorization, nil
 }

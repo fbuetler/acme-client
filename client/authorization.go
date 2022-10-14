@@ -40,7 +40,7 @@ func (c *client) fetchAuthorizations() error {
 		c.auths = append(c.auths, auth)
 	}
 
-	log.WithFields(log.Fields{"authorizations": fmt.Sprintf("%+v", c.auths)}).Debug("Authorizations fetched.")
+	log.WithFields(log.Fields{"authorizations": fmt.Sprintf("%+v", c.auths)}).Info("Authorizations fetched.")
 	return nil
 }
 
@@ -51,14 +51,14 @@ func (c *client) respondToAuthorization(url string) error {
 		return err
 	}
 
-	log.Debug("Sent challenge acknowledgement.")
+	log.Info("Sent challenge acknowledgement.")
 	return nil
 }
 
 func (c *client) pollForAuthStatusChange() error {
 	for _, url := range c.order.AuthorizationURLs {
 		for {
-			log.Debug("Polling for status...")
+			log.Info("Polling for status...")
 
 			var auth authorization
 			_, err := c.send(url, c.kid, nil, http.StatusOK, &auth)
@@ -68,7 +68,7 @@ func (c *client) pollForAuthStatusChange() error {
 			}
 
 			if auth.Status == "valid" || auth.Status == "invalid" {
-				log.Debugf("Authorization status changed: %s", auth.Status)
+				log.Infof("Authorization status changed: %s", auth.Status)
 				break
 			}
 
