@@ -12,6 +12,7 @@ import (
 // An ACME order object represents a client's request for a certificate
 // and is used to track the progress of that order through to issuance.
 type order struct {
+	URL               string       `json:"omitempty"`
 	Status            string       `json:"status,omitempty"`
 	Identifiers       []identifier `json:"identifiers,omitempty"`
 	AuthorizationURLs []string     `json:"authorizations,omitempty"`
@@ -32,7 +33,7 @@ type CSR struct {
 	CSR string `json:"csr"`
 }
 
-func (c *client) submitOrder() error {
+func (c *client) submitOrder() ([]authorization, error) {
 	var identifiers []identifier
 	for _, d := range c.domains {
 		identifiers = append(identifiers, identifier{
@@ -45,56 +46,25 @@ func (c *client) submitOrder() error {
 	}
 
 	url := c.dir.NewOrderURL
-	resp, err := c.send(url, c.kid, o, http.StatusCreated, &c.order)
+	resp, err := c.send(url, o, http.StatusCreated, &c.order)
 	if err != nil {
 		log.WithError(err).Error("Failed to submit order.")
-		return err
+		return nil, err
 	}
 
-	c.orderURL = resp.Header.Get("Location")
-
+	c.order.URL = resp.Header.Get("Location")
 	log.WithFields(log.Fields{"order": fmt.Sprintf("%+v", c.order)}).Info("Order submitted.")
-	return nil
-}
 
-func (c *client) pollForOrderStatusChange(url string, respOrder *order) error {
-	for {
-		log.Info("Polling for status...")
-
-		err := c.getOrder(url, respOrder)
-		if err != nil {
-			return err
-		}
-
-		if respOrder.Status == "valid" || respOrder.Status == "invalid" {
-			log.Infof("Order status changed: %s", respOrder.Status)
-
-			if respOrder.Status == "invalid" {
-				err = errors.New("invalid order")
-				log.WithError(err).Error("Order failed.")
-				return err
-			}
-			break
-		}
-
-		time.Sleep(1 * time.Second)
-	}
-
-	return nil
-}
-
-func (c *client) getOrder(url string, respOrder *order) error {
-	_, err := c.send(url, c.kid, nil, http.StatusOK, respOrder)
+	auths, err := c.fetchAuthorizations()
 	if err != nil {
-		log.WithError(err).Error("Failed to get order.")
-		return err
+		return nil, err
 	}
 
-	return nil
+	return auths, nil
 }
 
 func (c *client) finalizeOrder() error {
-	domain := c.domains[0]
+	domain := c.domains[0] // TODO is this correct
 	san := []string{domain}
 	for _, d := range c.domains {
 		if d != domain {
@@ -102,12 +72,12 @@ func (c *client) finalizeOrder() error {
 		}
 	}
 
-	err := c.generateCertificateKeyPair()
+	certKey, err := c.generateCertificateKeyPair()
 	if err != nil {
 		return err
 	}
 
-	encodedCSR, err := encodeCSR(c.certKey, domain, san)
+	encodedCSR, err := encodeCSR(certKey, domain, san)
 	if err != nil {
 		log.WithError(err).Error("Failed to encode CSR.")
 		return err
@@ -119,12 +89,65 @@ func (c *client) finalizeOrder() error {
 	}
 
 	var o order
-	_, err = c.send(url, c.kid, csr, http.StatusOK, &o)
+	_, err = c.send(url, csr, http.StatusOK, &o)
 	if err != nil {
 		log.WithError(err).Error("Failed to finalizeOrder.")
 		return err
 	}
 
+	certificateURL, err := c.pollForOrderStatusChange(c.order.URL)
+	if err != nil {
+		return err
+	}
+
 	log.WithFields(log.Fields{"order": fmt.Sprintf("%+v", o)}).Info("Order finalized.")
+
+	cert, err := c.downloadCert(certificateURL)
+	if err != nil {
+		return err
+	}
+
+	c.cert = certPair{
+		cert: cert,
+		key:  certKey,
+	}
+
+	return nil
+}
+
+func (c *client) pollForOrderStatusChange(url string) (string, error) {
+	var o order
+	for {
+		log.Info("Polling for status...")
+
+		err := c.getOrder(url, &o)
+		if err != nil {
+			return "", err
+		}
+
+		if o.Status == "valid" || o.Status == "invalid" {
+			log.Infof("Order status changed: %s", o.Status)
+
+			if o.Status == "invalid" {
+				err = errors.New("invalid order")
+				log.WithError(err).Error("Order failed.")
+				return "", err
+			}
+			break
+		}
+
+		time.Sleep(1 * time.Second)
+	}
+
+	return o.CertificateURL, nil
+}
+
+func (c *client) getOrder(url string, respOrder *order) error {
+	_, err := c.send(url, nil, http.StatusOK, respOrder)
+	if err != nil {
+		log.WithError(err).Error("Failed to get order.")
+		return err
+	}
+
 	return nil
 }

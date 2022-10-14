@@ -29,24 +29,25 @@ type challenge struct {
 	Token     string `json:"token"`
 }
 
-func (c *client) fetchAuthorizations() error {
+func (c *client) fetchAuthorizations() ([]authorization, error) {
+	var auths []authorization
 	for _, url := range c.order.AuthorizationURLs {
 		var auth authorization
-		_, err := c.send(url, c.kid, nil, http.StatusOK, &auth)
+		_, err := c.send(url, nil, http.StatusOK, &auth)
 		if err != nil {
 			log.WithError(err).Error("Failed to fetch authorizations.")
-			return err
+			return nil, err
 		}
 
-		c.auths = append(c.auths, auth)
+		auths = append(auths, auth)
 	}
 
-	log.WithFields(log.Fields{"authorizations": fmt.Sprintf("%+v", c.auths)}).Info("Authorizations fetched.")
-	return nil
+	log.WithFields(log.Fields{"authorizations": fmt.Sprintf("%+v", auths)}).Info("Authorizations fetched.")
+	return auths, nil
 }
 
 func (c *client) respondToAuthorization(url string) error {
-	_, err := c.send(url, c.kid, empty{}, http.StatusOK, &empty{})
+	_, err := c.send(url, empty{}, http.StatusOK, nil)
 	if err != nil {
 		log.WithError(err).Error("Failed to send challenge acknowledgement.")
 		return err
@@ -62,7 +63,7 @@ func (c *client) pollForAuthStatusChange() error {
 			log.Info("Polling for status...")
 
 			var auth authorization
-			_, err := c.send(url, c.kid, nil, http.StatusOK, &auth)
+			_, err := c.send(url, nil, http.StatusOK, &auth)
 			if err != nil {
 				log.WithError(err).Error("Failed to fetch authorization.")
 				return err

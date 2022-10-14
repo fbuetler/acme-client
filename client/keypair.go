@@ -30,16 +30,15 @@ func (c *client) generateAccountKeypair() error {
 	return nil
 }
 
-func (c *client) generateCertificateKeyPair() error {
+func (c *client) generateCertificateKeyPair() (*rsa.PrivateKey, error) {
 	privateKey, err := generateKeyPair()
 	if err != nil {
 		log.WithError(err).Error("Failed to generate private key")
-		return err
+		return nil, err
 	}
 
-	c.certKey = privateKey
 	log.Debug("Generated cert key pair.")
-	return nil
+	return privateKey, nil
 }
 
 func generateKeyPair() (*rsa.PrivateKey, error) {

@@ -113,6 +113,30 @@ func (jws *Signer) Encode(nonce, targetURL, kid string, payloadRaw interface{}) 
 	return jwsJSON, nil
 }
 
+func (jws *Signer) ComputeKeyThumbprint() (string, error) {
+	jwk := JWK{
+		Kty: "RSA",
+		N:   base64.RawURLEncoding.EncodeToString(jws.PublicKey.N.Bytes()),
+		E:   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(jws.PublicKey.E)).Bytes()),
+	}
+
+	json, err := marshallSegment(jwk)
+	if err != nil {
+		return "", err
+	}
+	// log.WithField("ordered JSON", string(json)).Debug("Marshalled account key.")
+
+	hasher := crypto.SHA256.New()
+	hasher.Write(json)
+	hash := hasher.Sum(nil)
+	// log.Debug("Hashed marshalled account key.")
+
+	encoded := base64.RawURLEncoding.EncodeToString(hash)
+	// log.Debug("Encoded hashed marshalled account key.")
+
+	return encoded, nil
+}
+
 func (jws *Signer) encodeHeader(nonce, targetURL, kid string) (string, error) {
 	h := JWSProtectedHeader{
 		Alg:   jws.algoritm,
@@ -180,28 +204,4 @@ func marshallSegment(s interface{}) ([]byte, error) {
 	// log.Debug("Marshalled segment.")
 
 	return json, nil
-}
-
-func ComputeKeyThumbprint(signer *rsa.PrivateKey, publicKey *rsa.PublicKey) (string, error) {
-	jwk := JWK{
-		Kty: "RSA",
-		N:   base64.RawURLEncoding.EncodeToString(publicKey.N.Bytes()),
-		E:   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(publicKey.E)).Bytes()),
-	}
-
-	json, err := marshallSegment(jwk)
-	if err != nil {
-		return "", err
-	}
-	// log.WithField("ordered JSON", string(json)).Debug("Marshalled account key.")
-
-	hasher := crypto.SHA256.New()
-	hasher.Write(json)
-	hash := hasher.Sum(nil)
-	// log.Debug("Hashed marshalled account key.")
-
-	encoded := base64.RawURLEncoding.EncodeToString(hash)
-	// log.Debug("Encoded hashed marshalled account key.")
-
-	return encoded, nil
 }

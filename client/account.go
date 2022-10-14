@@ -1,12 +1,9 @@
 package client
 
 import (
-	"fmt"
 	"net/http"
 
 	log "github.com/sirupsen/logrus"
-
-	"acme/jws"
 )
 
 // An ACME account resource represents a set of metadata associated with an account.
@@ -22,7 +19,7 @@ func (c *client) createAccount() error {
 	}
 	url := c.dir.NewAccountURL
 
-	resp, err := c.send(url, jws.NoKeyID, a, http.StatusCreated, &c.account)
+	resp, err := c.send(url, a, http.StatusCreated, nil)
 	if err != nil {
 		log.WithError(err).Error("Failed to create Account.")
 		return err
@@ -30,6 +27,6 @@ func (c *client) createAccount() error {
 
 	c.kid = resp.Header.Get("Location")
 
-	log.WithFields(log.Fields{"account": fmt.Sprintf("%+v", c.account)}).Info("Account created.")
+	log.Info("Account created.")
 	return nil
 }

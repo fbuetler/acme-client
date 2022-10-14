@@ -2,7 +2,6 @@ package client
 
 import (
 	"crypto"
-	"crypto/rsa"
 	"encoding/base64"
 	"errors"
 	"strings"
@@ -20,15 +19,15 @@ type provision struct {
 	url     string
 }
 
-func (c *client) solveChallenge(closeDNSServer chan struct{}, closeChalServer chan struct{}) error {
+func (c *client) solveChallenge(auths []authorization, closeDNSServer chan struct{}, closeChalServer chan struct{}) error {
 	var ps []provision
-	for _, a := range c.auths {
+	for _, a := range auths {
 		url, token, err := getChallenge(a.Challenges, c.challengeType)
 		if err != nil {
 			return err
 		}
 
-		keyAuth, err := generateKeyAuthorization(c.signer.Signer, &c.signer.Signer.PublicKey, token)
+		keyAuth, err := generateKeyAuthorization(c.signer, token)
 		if err != nil {
 			return err
 		}
@@ -75,13 +74,42 @@ func (c *client) solveChallenge(closeDNSServer chan struct{}, closeChalServer ch
 	return nil
 }
 
+func getChallenge(cs []challenge, challengeType string) (string, string, error) {
+	var url string
+	var t string
+	for _, c := range cs {
+		if c.Type == challengeType {
+			t = c.Token
+			url = c.URL
+		}
+	}
+
+	if len(t) == 0 {
+		return "", "", errors.New("no suited challenge available")
+	}
+
+	return url, t, nil
+}
+
+func generateKeyAuthorization(signer *jws.Signer, token string) (string, error) {
+	keyThumbprint, err := signer.ComputeKeyThumbprint()
+	if err != nil {
+		log.WithError(err).Error("Failed to compute key thumbprint")
+		return "", err
+	}
+
+	keyAuthorization := strings.Join([]string{token, keyThumbprint}, ".")
+	// log.Debug("Computed key authorization.")
+
+	return keyAuthorization, nil
+}
+
 func solveHTTPchallenge(closeChalServer chan struct{}, provisions []provision) error {
 	var ps []servers.HTTPProvision
 	for _, p := range provisions {
 		ps = append(ps, servers.HTTPProvision{Token: p.token, Thumbprint: p.keyAuth})
 	}
 
-	// TODO tear down after challenge verfication
 	err := servers.RunChallengeServer(closeChalServer, ps)
 	if err != nil {
 		return err
@@ -106,34 +134,4 @@ func solveDNSchallenge(closeDNSServer chan struct{}, provisions []provision, rec
 	servers.RunDNSServer(closeDNSServer, ps, record)
 
 	return nil
-}
-
-func getChallenge(cs []challenge, challengeType string) (string, string, error) {
-	var url string
-	var t string
-	for _, c := range cs {
-		if c.Type == challengeType {
-			t = c.Token
-			url = c.URL
-		}
-	}
-
-	if len(t) == 0 {
-		return "", "", errors.New("no suited challenge available")
-	}
-
-	return url, t, nil
-}
-
-func generateKeyAuthorization(signer *rsa.PrivateKey, publicKey *rsa.PublicKey, token string) (string, error) {
-	keyThumbprint, err := jws.ComputeKeyThumbprint(signer, publicKey)
-	if err != nil {
-		log.WithError(err).Error("Failed to compute key thumbprint")
-		return "", err
-	}
-
-	keyAuthorization := strings.Join([]string{token, keyThumbprint}, ".")
-	// log.Debug("Computed key authorization.")
-
-	return keyAuthorization, nil
 }

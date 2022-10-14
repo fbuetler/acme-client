@@ -14,6 +14,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type certPair struct {
+	cert []byte
+	key  *rsa.PrivateKey
+}
+
 type recvocation struct {
 	Certificate string `json:"certificate,omitempty"`
 }
@@ -37,22 +42,21 @@ func encodeCSR(signer *rsa.PrivateKey, domain string, sans []string) (string, er
 	return base64.RawURLEncoding.EncodeToString(csr), nil
 }
 
-func (c *client) downloadCert(o order) error {
-	url := o.CertificateURL
-	resp, err := c.send(url, c.kid, nil, http.StatusOK, nil)
+func (c *client) downloadCert(certificateURL string) ([]byte, error) {
+	resp, err := c.send(certificateURL, nil, http.StatusOK, nil)
 	if err != nil {
 		log.WithError(err).Error("Failed to download certificate.")
-		return err
+		return nil, err
 	}
 
-	c.cert, err = io.ReadAll(resp.Body)
+	cert, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.WithError(err).Error("Failed to read response body.")
-		return err
+		return nil, err
 	}
 
 	log.Info("Downloaded issued certificate.")
-	return nil
+	return cert, nil
 }
 
 func parseCert(certPEM []byte) (*x509.Certificate, error) {

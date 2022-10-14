@@ -2,7 +2,6 @@ package client
 
 import (
 	"bytes"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -31,19 +30,15 @@ type client struct {
 	domains       []string // domains to issue a certificate for
 
 	httpClient   http.Client // http client used for all requests to the ACME server
-	dir          dir         // directory with the client configuration
 	directoryURL string      // directory URL to bootstrap the client configuration
-	orderURL     string      // URL to the placed order
+	dir          dir         // directory with the client configuration
 
-	signer  *jws.Signer // signing key
-	account account     // account connected with the key pair above
-	kid     string      // key ID to the account
+	signer *jws.Signer // signing key of the account
+	kid    string      // key ID to the account
 
-	order order           // placed order
-	auths []authorization // any of these challenge has to be completed
+	order order // placed order
 
-	certKey *rsa.PrivateKey // private key for the signed certificate
-	cert    []byte          // signed certificate
+	cert certPair // signed certificate
 }
 
 func NewClient(rootCAs *x509.CertPool, directoryURL, challengeType string, domains []string, record string) *client {
@@ -89,17 +84,12 @@ func (c *client) IssueCertificate(closeDNSServer, closeCertServer, closeChalServ
 		return err
 	}
 
-	err = c.submitOrder()
+	auths, err := c.submitOrder()
 	if err != nil {
 		return err
 	}
 
-	err = c.fetchAuthorizations()
-	if err != nil {
-		return err
-	}
-
-	err = c.solveChallenge(closeDNSServer, closeChalServer)
+	err = c.solveChallenge(auths, closeDNSServer, closeChalServer)
 	if err != nil {
 		return err
 	}
@@ -109,18 +99,7 @@ func (c *client) IssueCertificate(closeDNSServer, closeCertServer, closeChalServ
 		return err
 	}
 
-	var order order
-	err = c.pollForOrderStatusChange(c.orderURL, &order)
-	if err != nil {
-		return err
-	}
-
-	err = c.downloadCert(order)
-	if err != nil {
-		return err
-	}
-
-	err = servers.RunCertificateServer(closeCertServer, c.cert, c.certKey)
+	err = servers.RunCertificateServer(closeCertServer, c.cert.cert, c.cert.key)
 	if err != nil {
 		return err
 	}
@@ -129,7 +108,7 @@ func (c *client) IssueCertificate(closeDNSServer, closeCertServer, closeChalServ
 }
 
 func (c *client) RevokeCert() error {
-	cert, err := parseCert(c.cert)
+	cert, err := parseCert(c.cert.cert)
 	if err != nil {
 		log.WithError(err).Error("Failed to convert certificate to DER format.")
 		return err
@@ -140,7 +119,7 @@ func (c *client) RevokeCert() error {
 		Certificate: base64.RawURLEncoding.EncodeToString(cert.Raw),
 	}
 
-	_, err = c.send(url, c.kid, r, http.StatusOK, nil)
+	_, err = c.send(url, r, http.StatusOK, nil)
 	if err != nil {
 		log.WithError(err).Error("Failed to revoke certificate.")
 		return err
@@ -150,13 +129,13 @@ func (c *client) RevokeCert() error {
 	return nil
 }
 
-func (c *client) send(url, kid string, reqPayload interface{}, expectedStatusCode int, respPayload interface{}) (*http.Response, error) {
+func (c *client) send(url string, reqPayload interface{}, expectedStatusCode int, respPayload interface{}) (*http.Response, error) {
 	nonce, err := c.getNonce()
 	if err != nil {
 		return nil, err
 	}
 
-	jws, err := c.signer.Encode(nonce, url, kid, reqPayload)
+	jws, err := c.signer.Encode(nonce, url, c.kid, reqPayload)
 	if err != nil {
 		log.WithError(err).Error("Failed to encode JWS.")
 		return nil, err
