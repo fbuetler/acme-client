@@ -23,7 +23,7 @@ func RunDNSServer(close chan struct{}, ps chan DNSProvision, record string) erro
 
 	l.Info("Starting DNS server...")
 
-	keyAuths := map[string]string{}
+	keyAuths := map[string][]string{}
 	dnsMux := dns.NewServeMux()
 	dnsMux.HandleFunc(".", handleDNSrequest(l, record, keyAuths))
 
@@ -40,8 +40,9 @@ func RunDNSServer(close chan struct{}, ps chan DNSProvision, record string) erro
 		// TODO shutdown mechanism
 		for {
 			p := <-ps
-			// TODO the following dot may break thinks
-			keyAuths[challengeDomainPrefix+p.Domain+"."] = p.KeyAuth // write only otherwise a lock is required
+			// TODO the following dot suffix may break things
+			d := challengeDomainPrefix + p.Domain + "."
+			keyAuths[d] = append(keyAuths[d], p.KeyAuth) // append only otherwise a lock is required
 			l.WithField("Domain", p.Domain).WithField("Key auth", p.KeyAuth).Info("Received a provision.")
 		}
 	}()
@@ -55,7 +56,7 @@ func RunDNSServer(close chan struct{}, ps chan DNSProvision, record string) erro
 	return nil
 }
 
-func handleDNSrequest(l *log.Entry, record string, keyAuths map[string]string) dns.HandlerFunc {
+func handleDNSrequest(l *log.Entry, record string, keyAuths map[string][]string) dns.HandlerFunc {
 	// all queries will be answered with the provided record
 	return func(w dns.ResponseWriter, r *dns.Msg) {
 		msg := dns.Msg{}
@@ -68,12 +69,14 @@ func handleDNSrequest(l *log.Entry, record string, keyAuths map[string]string) d
 		})
 		l.Infof("Responded to %s with %s", domain, record)
 
-		if ka, ok := keyAuths[domain]; strings.HasPrefix(domain, challengeDomainPrefix) && ok {
-			msg.Answer = append(msg.Answer, &dns.TXT{
-				Hdr: dns.RR_Header{Name: domain, Rrtype: dns.TypeTXT, Class: dns.ClassINET, Ttl: 300},
-				Txt: []string{ka},
-			})
-			l.Info("Responded with key authorization")
+		if kas, ok := keyAuths[domain]; strings.HasPrefix(domain, challengeDomainPrefix) && ok {
+			for _, ka := range kas {
+				msg.Answer = append(msg.Answer, &dns.TXT{
+					Hdr: dns.RR_Header{Name: domain, Rrtype: dns.TypeTXT, Class: dns.ClassINET, Ttl: 300},
+					Txt: []string{ka},
+				})
+				l.Info("Responded with key authorization")
+			}
 		}
 
 		w.WriteMsg(&msg)
