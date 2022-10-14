@@ -123,8 +123,8 @@ func (jws *Signer) encodeHeader(nonce, targetURL, kid string) (string, error) {
 	if kid == NoKeyID {
 		h.JWK = &JWK{
 			Kty: "RSA",
-			N:   encodeBase64url(jws.PublicKey.N.Bytes()),
-			E:   encodeBase64url(big.NewInt(int64(jws.PublicKey.E)).Bytes()),
+			N:   base64.RawURLEncoding.EncodeToString(jws.PublicKey.N.Bytes()),
+			E:   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(jws.PublicKey.E)).Bytes()),
 		}
 	} else {
 		h.KID = kid
@@ -149,7 +149,7 @@ func (jws *Signer) computeSignature(p []byte) (string, error) {
 		return "", err
 	}
 
-	signature := encodeBase64url(signBytes)
+	signature := base64.RawURLEncoding.EncodeToString(signBytes)
 	// log.Debug("Computed signature.")
 
 	return signature, nil
@@ -165,7 +165,7 @@ func marshalAndEncodeSegment(s interface{}) (string, error) {
 		return "", err
 	}
 
-	encoded := encodeBase64url(json)
+	encoded := base64.RawURLEncoding.EncodeToString(json)
 	// log.Debug("Encoded segment.")
 
 	return encoded, nil
@@ -185,8 +185,8 @@ func marshallSegment(s interface{}) ([]byte, error) {
 func ComputeKeyThumbprint(signer *rsa.PrivateKey, publicKey *rsa.PublicKey) (string, error) {
 	jwk := JWK{
 		Kty: "RSA",
-		N:   encodeBase64url(publicKey.N.Bytes()),
-		E:   encodeBase64url(big.NewInt(int64(publicKey.E)).Bytes()),
+		N:   base64.RawURLEncoding.EncodeToString(publicKey.N.Bytes()),
+		E:   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(publicKey.E)).Bytes()),
 	}
 
 	json, err := marshallSegment(jwk)
@@ -200,13 +200,8 @@ func ComputeKeyThumbprint(signer *rsa.PrivateKey, publicKey *rsa.PublicKey) (str
 	hash := hasher.Sum(nil)
 	// log.Debug("Hashed marshalled account key.")
 
-	encoded := encodeBase64url(hash)
+	encoded := base64.RawURLEncoding.EncodeToString(hash)
 	// log.Debug("Encoded hashed marshalled account key.")
 
 	return encoded, nil
-}
-
-// TODO maybe we dont need this anymore
-func encodeBase64url(seg []byte) string {
-	return base64.RawURLEncoding.EncodeToString(seg)
 }

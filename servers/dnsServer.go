@@ -38,6 +38,7 @@ func RunDNSServer(close chan struct{}, ps chan DNSProvision, record string) erro
 
 	go func() {
 		// TODO shutdown mechanism
+		// TODO delete txt records after challenge verfication
 		for {
 			p := <-ps
 			// TODO the following dot suffix may break things
