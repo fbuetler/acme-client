@@ -21,6 +21,13 @@ type order struct {
 	NotBefore         string       `json:"notBefore,omitempty"`
 	NotAfter          string       `json:"notAfter,omitempty"`
 	Expires           string       `json:"expires,omitempty"`
+	Error             struct {
+		Type string `json:"type,omitempty"`
+		Title string `json:"title,omitempty"`
+		Status int `json:"status,omitempty"`
+		Detail string `json:"detail,omitempty"`
+		Instance string `json:"instance,omitempty"`
+	}       `json:"error,omitempty"`
 }
 
 type identifier struct {

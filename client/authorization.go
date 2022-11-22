@@ -75,6 +75,9 @@ func (c *client) pollForAuthStatusChange() error {
 				if auth.Status == "invalid" {
 					err = errors.New("invalid authorization")
 					log.WithError(err).Error("Authorization failed.")
+					var o order
+					_ = c.getOrder(c.order.URL, &o)
+					log.WithError(err).Error(o.Error)
 					return err
 				}
 				break
