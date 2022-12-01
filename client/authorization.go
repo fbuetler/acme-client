@@ -3,6 +3,7 @@ package client
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -47,10 +48,18 @@ func (c *client) fetchAuthorizations() ([]authorization, error) {
 }
 
 func (c *client) respondToAuthorization(url string) error {
-	_, err := c.send(url, empty{}, http.StatusOK, nil)
+	resp, err := c.send(url, empty{}, http.StatusOK, nil)
 	if err != nil {
 		log.WithError(err).Error("Failed to send challenge acknowledgement.")
 		return err
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.WithError(err).Error("Failed to read authorization response body.")
+	} else {
+		body := string(bodyBytes)
+		log.WithField("body", body).Debug("Check authorization response body.")
 	}
 
 	log.Info("Sent challenge acknowledgement.")
@@ -75,9 +84,15 @@ func (c *client) pollForAuthStatusChange() error {
 				if auth.Status == "invalid" {
 					err = errors.New("invalid authorization")
 					log.WithError(err).Error("Authorization failed.")
+
 					var o order
-					_ = c.getOrder(c.order.URL, &o)
-					log.WithError(err).Error(o.Error)
+					err := c.getOrder(url, &o)
+					if err != nil {
+						log.WithError(err).Error("Get order failed.")
+						return err
+					}
+					log.WithField("order error", o.Error).Error("Order failed.")
+
 					return err
 				}
 				break

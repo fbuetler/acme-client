@@ -3,6 +3,7 @@ package servers
 import (
 	"net"
 	"strings"
+	"sync"
 
 	"github.com/miekg/dns"
 	log "github.com/sirupsen/logrus"
@@ -36,7 +37,9 @@ func RunDNSServer(close chan struct{}, ps []DNSProvision, record string) error {
 	dnsMux := dns.NewServeMux()
 	dnsMux.HandleFunc(".", handleDNSrequest(l, record, keyAuths))
 
-	srv := &dns.Server{Addr: dnsPort, Net: "udp", Handler: dnsMux}
+	waitLock := sync.Mutex{}
+	srv := &dns.Server{Addr: dnsPort, Net: "udp", Handler: dnsMux, NotifyStartedFunc: waitLock.Unlock}
+	waitLock.Lock()
 
 	go func() {
 		l.Infof("DNS server is listening on %s\n", dnsPort)
@@ -44,6 +47,7 @@ func RunDNSServer(close chan struct{}, ps []DNSProvision, record string) error {
 			l.Errorf("Failed to set udp listener %s\n", err.Error())
 		}
 	}()
+	waitLock.Lock() // wait for it to be unlocked
 
 	go func() {
 		<-close

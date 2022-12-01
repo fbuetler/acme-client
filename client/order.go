@@ -9,25 +9,25 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type ErrorDetails struct {
+	Type       string `json:"type,omitempty"`
+	Detail     string `json:"detail,omitempty"`
+	HTTPStatus int    `json:"status,omitempty"`
+}
+
 // An ACME order object represents a client's request for a certificate
 // and is used to track the progress of that order through to issuance.
 type order struct {
-	URL               string       `json:"omitempty"`
-	Status            string       `json:"status,omitempty"`
-	Identifiers       []identifier `json:"identifiers,omitempty"`
-	AuthorizationURLs []string     `json:"authorizations,omitempty"`
-	FinalizeURL       string       `json:"finalize,omitempty"`
-	CertificateURL    string       `json:"certificate,omitempty"`
-	NotBefore         string       `json:"notBefore,omitempty"`
-	NotAfter          string       `json:"notAfter,omitempty"`
-	Expires           string       `json:"expires,omitempty"`
-	Error             struct {
-		Type string `json:"type,omitempty"`
-		Title string `json:"title,omitempty"`
-		Status int `json:"status,omitempty"`
-		Detail string `json:"detail,omitempty"`
-		Instance string `json:"instance,omitempty"`
-	}       `json:"error,omitempty"`
+	URL               string        `json:"omitempty"`
+	Status            string        `json:"status,omitempty"`
+	Error             *ErrorDetails `json:"error,omitempty"`
+	Identifiers       []identifier  `json:"identifiers,omitempty"`
+	AuthorizationURLs []string      `json:"authorizations,omitempty"`
+	FinalizeURL       string        `json:"finalize,omitempty"`
+	CertificateURL    string        `json:"certificate,omitempty"`
+	NotBefore         string        `json:"notBefore,omitempty"`
+	NotAfter          string        `json:"notAfter,omitempty"`
+	Expires           string        `json:"expires,omitempty"`
 }
 
 type identifier struct {
